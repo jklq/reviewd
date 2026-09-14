@@ -166,13 +166,16 @@ or `participant ID as Display Name`, messages as `Sender->>Receiver: short text`
 (also --> -->> -x --x -) --)), `Note left of A: text` / `Note over A,B: text`,
 and `loop`/`alt`/`opt`/`par`/`critical`/`break`/`rect`/`box` blocks closed with
 `end`. IDs start with a letter, use only letters, digits, `_` and `-`, and
-must not end with `-`; use `as` for display names with spaces. Every message
-needs a colon and non-empty
+must not end with `-`; use `as` for display names with spaces. IDs must not
+be Mermaid keywords such as end, loop, note, or box, in any capitalization.
+Every message needs a colon and non-empty
 text without backticks, angle brackets, semicolons, or `#` (it starts a
 Mermaid comment). Use `else` only inside
 `alt`; `Note over` takes at most two participants; `box` holds participant,
-actor, and `destroy` lines only. A `create` needs a fresh ID and its next
-message to target the new participant, and every `deactivate` needs a
+actor, and `destroy` lines only, and a participant may belong to only one
+box. A `create` needs a fresh ID and its next
+message to target the new participant; every `activate` ID must also appear
+as a participant, in a message, or in a note, and every `deactivate` needs a
 prior activation. Include at least one message. Show the
 relevant changed interaction, not a generic review workflow. For docs/config-only
 changes, show the actual reader/operator/config-consumer interaction; don't

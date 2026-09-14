@@ -20,6 +20,27 @@ const (
 // exceptions are too subtle for generated diagrams to rely on.
 const participantIDPattern = `[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?`
 
+// reservedSequenceIDs are Mermaid sequence-diagram keywords, matched
+// case-insensitively: the lexer reserves them before actor IDs, so no
+// participant may use one. Words that need trailing syntax (title,
+// accTitle) or live in other lexer states (as) lex as IDs and are valid.
+var reservedSequenceIDs = map[string]bool{
+	"participant": true, "actor": true, "create": true, "destroy": true,
+	"activate": true, "deactivate": true, "box": true, "loop": true,
+	"rect": true, "opt": true, "alt": true, "else": true, "par": true,
+	"par_over": true, "and": true, "critical": true, "option": true,
+	"break": true, "end": true, "note": true, "over": true, "links": true,
+	"link": true, "properties": true, "details": true,
+	"sequencediagram": true, "autonumber": true, "off": true,
+}
+
+func rejectReservedSequenceID(id string, lineno int) error {
+	if reservedSequenceIDs[strings.ToLower(id)] {
+		return fmt.Errorf("sequence diagram line %d: %q is a reserved Mermaid keyword; pick a different participant ID", lineno, id)
+	}
+	return nil
+}
+
 var (
 	sequenceMessageRe = regexp.MustCompile(`^(` + participantIDPattern + `)\s*(-->>|->>|--\)|-\)|--x|-x|-->|->)\s*([+-])?\s*(` + participantIDPattern + `)\s*:(.*)$`)
 	participantRe     = regexp.MustCompile(`^(participant|actor)\s+(` + participantIDPattern + `)(?:\s+as\s+(.+))?$`)
@@ -45,6 +66,9 @@ type sequenceLifecycle struct {
 	hasDestroy     bool
 	activations    map[string]int
 	seen           map[string]bool
+	boxOf          map[string]int
+	boxCount       int
+	openBox        int
 }
 
 func (l *sequenceLifecycle) consumeMessage(from, to string, lineno int) error {
@@ -105,7 +129,7 @@ func ValidateSequenceDiagram(src string) error {
 	}
 	var stack []string
 	messages := 0
-	life := &sequenceLifecycle{activations: map[string]int{}, seen: map[string]bool{}}
+	life := &sequenceLifecycle{activations: map[string]int{}, seen: map[string]bool{}, boxOf: map[string]int{}}
 	for i := first + 1; i < len(lines); i++ {
 		lineno := i + 1
 		raw := lines[i]
@@ -132,6 +156,11 @@ func ValidateSequenceDiagram(src string) error {
 	if messages == 0 {
 		return fmt.Errorf("sequence diagram must include at least one message like \"A->>B: text\"")
 	}
+	for id := range life.activations {
+		if !life.seen[id] {
+			return fmt.Errorf("sequence diagram: \"activate %s\" needs %s to be a declared participant or appear in a message or note", id, id)
+		}
+	}
 	return nil
 }
 
@@ -151,6 +180,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 	if line == "end" {
 		if len(*stack) == 0 {
 			return fmt.Errorf("sequence diagram line %d: \"end\" without an open loop/alt/opt/par/critical/break/rect/box block", lineno)
+		}
+		if (*stack)[len(*stack)-1] == "box" {
+			life.openBox = 0
 		}
 		*stack = (*stack)[:len(*stack)-1]
 		return nil
@@ -200,12 +232,25 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		if strings.Contains(label, ":") {
 			return fmt.Errorf("sequence diagram line %d: %q labels must not contain a colon", lineno, keyword)
 		}
+		if keyword == "box" {
+			life.boxCount++
+			life.openBox = life.boxCount
+		}
 		*stack = append(*stack, keyword)
 		return nil
 	}
 	if m := participantRe.FindStringSubmatch(line); m != nil {
+		if err := rejectReservedSequenceID(m[2], lineno); err != nil {
+			return err
+		}
 		if err := validateParticipantLabel(m[3], lineno); err != nil {
 			return err
+		}
+		if inBox {
+			if owner := life.boxOf[m[2]]; owner != 0 && owner != life.openBox {
+				return fmt.Errorf("sequence diagram line %d: participant %s is already in another box; Mermaid allows one box per participant", lineno, m[2])
+			}
+			life.boxOf[m[2]] = life.openBox
 		}
 		life.seen[m[2]] = true
 		return nil
@@ -216,6 +261,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 	if m := createRe.FindStringSubmatch(line); m != nil {
 		if inBox {
 			return boxErr
+		}
+		if err := rejectReservedSequenceID(m[2], lineno); err != nil {
+			return err
 		}
 		if err := validateParticipantLabel(m[3], lineno); err != nil {
 			return err
@@ -231,12 +279,18 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return fmt.Errorf("sequence diagram line %d: use \"create participant ID\" (IDs start with a letter, use only letters, digits, _ and -, and must not end with -)", lineno)
 	}
 	if m := destroyRe.FindStringSubmatch(line); m != nil {
+		if err := rejectReservedSequenceID(m[1], lineno); err != nil {
+			return err
+		}
 		life.pendingDestroy, life.hasDestroy = m[1], true
 		return nil
 	}
 	if m := activateRe.FindStringSubmatch(line); m != nil {
 		if inBox {
 			return boxErr
+		}
+		if err := rejectReservedSequenceID(m[2], lineno); err != nil {
+			return err
 		}
 		if m[1] == "activate" {
 			life.activations[m[2]]++
@@ -260,6 +314,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 			id = strings.TrimSpace(id)
 			if !participantIDRe.MatchString(id) {
 				return fmt.Errorf("sequence diagram line %d: note participants must be IDs starting with a letter and not ending with - (got %q); use \"Note over A,B: text\"", lineno, trimForError(id))
+			}
+			if err := rejectReservedSequenceID(id, lineno); err != nil {
+				return err
 			}
 		}
 		if m[1] != "over" && len(ids) != 1 {
@@ -291,6 +348,12 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 	if m := sequenceMessageRe.FindStringSubmatch(line); m != nil {
 		if inBox {
 			return boxErr
+		}
+		if err := rejectReservedSequenceID(m[1], lineno); err != nil {
+			return err
+		}
+		if err := rejectReservedSequenceID(m[4], lineno); err != nil {
+			return err
 		}
 		if err := life.consumeMessage(m[1], m[4], lineno); err != nil {
 			return err

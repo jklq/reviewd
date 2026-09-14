@@ -61,6 +61,14 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\rA->>B: Hi",
 		"sequenceDiagram\r\nA->>B: Hi\rB-->>A: Yo",
 		"sequenceDiagram\n A-B->>C-D: Hi",
+		"sequenceDiagram\n box One\n participant A\n participant A\n end\n A->>B: Hi",
+		"sequenceDiagram\n box One\n participant A\n end\n participant A\n A->>B: Hi",
+		"sequenceDiagram\n participant A\n box One\n participant A\n end\n A->>B: Hi",
+		"sequenceDiagram\n endgame->>B: Call",
+		"sequenceDiagram\n activate B\n A->>B: Hi\n deactivate B",
+		"sequenceDiagram\n title->>B: Call",
+		"sequenceDiagram\n as->>B: Call",
+		"sequenceDiagram\n accTitle->>B: Call",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
@@ -175,6 +183,17 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"dash destroy":       "sequenceDiagram\n X->>Y: Hi\n destroy A-",
 		"dash create":        "sequenceDiagram\n create participant A-\n X->>A: Hi",
 		"dash sender spaced": "sequenceDiagram\n A- ->>B: hi",
+		"box dup two boxes":  "sequenceDiagram\n box One\n participant A\n end\n box Two\n participant A\n end\n A->>B: Hi",
+		"keyword sender":     "sequenceDiagram\n end->>B: Call",
+		"keyword receiver":   "sequenceDiagram\n A->>note: Hi",
+		"keyword upper":      "sequenceDiagram\n END->>B: Call",
+		"keyword declare":    "sequenceDiagram\n participant loop\n A->>B: Hi",
+		"keyword create":     "sequenceDiagram\n create participant alt\n A->>B: Hi",
+		"keyword note":       "sequenceDiagram\n X->>Y: Hi\n Note over box: x",
+		"keyword activate":   "sequenceDiagram\n X->>Y: Hi\n activate off",
+		"keyword destroy":    "sequenceDiagram\n X->>Y: Hi\n destroy par",
+		"activate unknown":   "sequenceDiagram\n activate B\n A->>C: Call",
+		"activate unknown 2": "sequenceDiagram\n A->>C: Call\n activate B\n deactivate B",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {
@@ -300,12 +319,15 @@ func TestValidateSequenceDiagramActivationShorthandTargets(t *testing.T) {
 
 func TestValidateSequenceDiagramSubsetRestrictions(t *testing.T) {
 	cases := map[string]string{
-		"sequenceDiagram\n opt Maybe\n A->>B: x\n else Other\n A->>B: y\n end": `"else" is only valid inside an alt block`,
-		"sequenceDiagram\n A->>B: Hi\n Note over A,B,C: x":                     `"Note over" takes at most two participants`,
-		"sequenceDiagram\n A->>B: a;b":                                         "must not contain semicolons",
-		"sequenceDiagram\n loop A;B\n A->>B: Hi\n end":                         "must not contain semicolons",
-		"sequenceDiagram\n box T\n participant A\n A->>B: Hi\n end":            "allowed inside a box",
-		"sequenceDiagram\n box T\n participant A\n Note over A: x\n end":       "allowed inside a box",
+		"sequenceDiagram\n opt Maybe\n A->>B: x\n else Other\n A->>B: y\n end":                        `"else" is only valid inside an alt block`,
+		"sequenceDiagram\n A->>B: Hi\n Note over A,B,C: x":                                            `"Note over" takes at most two participants`,
+		"sequenceDiagram\n A->>B: a;b":                                                                "must not contain semicolons",
+		"sequenceDiagram\n loop A;B\n A->>B: Hi\n end":                                                "must not contain semicolons",
+		"sequenceDiagram\n box T\n participant A\n A->>B: Hi\n end":                                   "allowed inside a box",
+		"sequenceDiagram\n box T\n participant A\n Note over A: x\n end":                              "allowed inside a box",
+		"sequenceDiagram\n box One\n participant A\n end\n box Two\n participant A\n end\n A->>B: Hi": "already in another box",
+		"sequenceDiagram\n end->>B: Call":                                                             "reserved Mermaid keyword",
+		"sequenceDiagram\n activate B\n A->>C: Call":                                                  "needs B to be",
 	}
 	for src, want := range cases {
 		err := ValidateSequenceDiagram(src)
