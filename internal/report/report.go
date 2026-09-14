@@ -94,8 +94,8 @@ func (r Report) Validate() error {
 			return errors.New("invalid important file (description <=240 bytes)")
 		}
 	}
-	if len(r.SequenceDiagram) > 12000 || !strings.HasPrefix(strings.TrimSpace(r.SequenceDiagram), "sequenceDiagram\n") || strings.Contains(r.SequenceDiagram, "```") || strings.Contains(r.SequenceDiagram, "%%{") {
-		return errors.New("provide a sequenceDiagram without fences or Mermaid directives")
+	if err := ValidateSequenceDiagram(r.SequenceDiagram); err != nil {
+		return err
 	}
 	for _, f := range r.Findings {
 		if err := f.Validate(); err != nil {
