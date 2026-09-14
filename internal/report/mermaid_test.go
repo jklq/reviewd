@@ -50,6 +50,13 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\n A->>+A: Self\n A-->>-A: End",
 		"sequenceDiagram\n box Aqua Team\n participant A\n participant B\n destroy B\n end\n A->>B: Hi",
 		"sequenceDiagram\n create participant B\n A->>+B: Start\n deactivate B",
+		"sequenceDiagram\n graph ->>B: text",
+		"sequenceDiagram\n flowchart ->>B: text",
+		"sequenceDiagram\n gantt ->>B: text",
+		"sequenceDiagram\n participant A\n participant A\n A->>B: Hi",
+		"sequenceDiagram\n create participant A\n X->>A: Hi\n participant A",
+		"sequenceDiagram\n X->>Y: Hi\n activate B\n create participant B\n X->>B: Yo",
+		"sequenceDiagram\n X->>Y: Hi\n destroy B\n create participant B\n X->>B: Yo",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
@@ -136,6 +143,11 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"title in box":         "sequenceDiagram\n box Aqua Team\n title: T\n end\n A->>B: Hi",
 		"autonumber in box":    "sequenceDiagram\n box Aqua Team\n autonumber\n end\n A->>B: Hi",
 		"box in box":           "sequenceDiagram\n box Outer\n box Inner\n end\n end\n A->>B: Hi",
+		"dup declared create":  "sequenceDiagram\n participant A\n create participant A\n X->>A: Hi",
+		"dup message create":   "sequenceDiagram\n Y->>A: Hi\n create participant A\n X->>A: Yo",
+		"dup note create":      "sequenceDiagram\n X->>Y: Hi\n Note over A: x\n create participant A\n X->>A: Yo",
+		"dup create twice":     "sequenceDiagram\n create participant A\n X->>A: Hi\n create participant A\n Y->>A: Yo",
+		"dup after destroy":    "sequenceDiagram\n participant A\n A->>B: Hi\n destroy A\n B->>A: Bye\n create participant A\n X->>A: Yo",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {
@@ -233,6 +245,7 @@ func TestValidateSequenceDiagramLifecyclePairing(t *testing.T) {
 		"sequenceDiagram\n create participant A\n destroy B\n X->>B: Hi":             "needs a message to A next",
 		"sequenceDiagram\n A->>B: Hi\n deactivate B":                                 "without a matching activation",
 		"sequenceDiagram\n A->>B: Hi\n B-->>-A: Done":                                "without a matching activation",
+		"sequenceDiagram\n participant A\n create participant A\n X->>A: Hi":         "reuses an ID already used",
 	}
 	for src, want := range invalid {
 		err := ValidateSequenceDiagram(src)

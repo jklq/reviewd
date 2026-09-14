@@ -169,9 +169,9 @@ and `loop`/`alt`/`opt`/`par`/`critical`/`break`/`rect`/`box` blocks closed with
 `as` for display names with spaces. Every message needs a colon and non-empty
 text without backticks, angle brackets, or semicolons. Use `else` only inside
 `alt`; `Note over` takes at most two participants; `box` holds participant,
-actor, and `destroy` lines only. A `create` needs its next message to target
-the new participant, and every `deactivate` needs a prior activation.
-Include at least one message. Show the
+actor, and `destroy` lines only. A `create` needs a fresh ID and its next
+message to target the new participant, and every `deactivate` needs a
+prior activation. Include at least one message. Show the
 relevant changed interaction, not a generic review workflow. For docs/config-only
 changes, show the actual reader/operator/config-consumer interaction; don't
 invent runtime code.

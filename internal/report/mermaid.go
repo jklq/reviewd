@@ -38,6 +38,7 @@ type sequenceLifecycle struct {
 	hasCreate      bool
 	hasDestroy     bool
 	activations    map[string]int
+	seen           map[string]bool
 }
 
 func (l *sequenceLifecycle) consumeMessage(from, to string, lineno int) error {
@@ -94,7 +95,7 @@ func ValidateSequenceDiagram(src string) error {
 	}
 	var stack []string
 	messages := 0
-	life := &sequenceLifecycle{activations: map[string]int{}}
+	life := &sequenceLifecycle{activations: map[string]int{}, seen: map[string]bool{}}
 	for i := first + 1; i < len(lines); i++ {
 		lineno := i + 1
 		raw := lines[i]
@@ -127,11 +128,6 @@ func ValidateSequenceDiagram(src string) error {
 func validateSequenceLine(line string, lineno int, stack *[]string, messages *int, life *sequenceLifecycle) error {
 	if line == "sequenceDiagram" {
 		return fmt.Errorf("sequence diagram line %d: duplicate \"sequenceDiagram\" header; use one statement per line", lineno)
-	}
-	for _, other := range []string{"graph", "flowchart", "classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "mindmap", "timeline", "journey", "gitGraph", "C4Context"} {
-		if line == other || strings.HasPrefix(line, other+" ") || strings.HasPrefix(line, other+"\t") {
-			return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
-		}
 	}
 	// Mermaid box sections hold participant, actor, and destroy lines only.
 	inBox := len(*stack) > 0 && (*stack)[len(*stack)-1] == "box"
@@ -198,7 +194,11 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return nil
 	}
 	if m := participantRe.FindStringSubmatch(line); m != nil {
-		return validateParticipantLabel(m[3], lineno)
+		if err := validateParticipantLabel(m[3], lineno); err != nil {
+			return err
+		}
+		life.seen[m[2]] = true
+		return nil
 	}
 	if strings.HasPrefix(line, "participant ") || strings.HasPrefix(line, "actor ") {
 		return fmt.Errorf("sequence diagram line %d: use \"participant ID\" or \"participant ID as Display Name\" with ID starting with a letter (letters, digits, _ and - only)", lineno)
@@ -210,6 +210,10 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		if err := validateParticipantLabel(m[3], lineno); err != nil {
 			return err
 		}
+		if life.seen[m[2]] {
+			return fmt.Errorf("sequence diagram line %d: \"create participant %s\" reuses an ID already used above; Mermaid forbids duplicate actor IDs, so pick a fresh ID", lineno, m[2])
+		}
+		life.seen[m[2]] = true
 		life.pendingCreate, life.hasCreate = m[2], true
 		return nil
 	}
@@ -254,7 +258,13 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		if m[1] == "over" && len(ids) > 2 {
 			return fmt.Errorf("sequence diagram line %d: \"Note over\" takes at most two participants; use \"Note over A,B: text\"", lineno)
 		}
-		return validateMessageText(m[3], lineno)
+		if err := validateMessageText(m[3], lineno); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			life.seen[strings.TrimSpace(id)] = true
+		}
+		return nil
 	}
 	if strings.HasPrefix(line, "Note ") || line == "Note" {
 		return fmt.Errorf("sequence diagram line %d: use \"Note left of A: text\", \"Note right of A: text\" or \"Note over A[,B]: text\"", lineno)
@@ -286,6 +296,8 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 			}
 			life.activations[m[1]]--
 		}
+		life.seen[m[1]] = true
+		life.seen[m[4]] = true
 		return nil
 	}
 	if strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
@@ -293,6 +305,14 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 	}
 	if !strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
 		return fmt.Errorf("sequence diagram line %d: messages need a colon (\"A->>B: text\"); got %q", lineno, trimForError(line))
+	}
+	// Anything starting with another diagram's header that is not a valid
+	// statement (a message from an ID like graph is handled above) is a
+	// wrong diagram type.
+	for _, other := range []string{"graph", "flowchart", "classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "mindmap", "timeline", "journey", "gitGraph", "C4Context"} {
+		if line == other || strings.HasPrefix(line, other+" ") || strings.HasPrefix(line, other+"\t") {
+			return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
+		}
 	}
 	return fmt.Errorf("sequence diagram line %d: unsupported statement %q; use participant/actor, messages (A->>B: text), Note, loop/alt/opt/par/critical/break/rect/box with end, or autonumber", lineno, trimForError(line))
 }
