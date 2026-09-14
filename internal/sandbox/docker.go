@@ -121,7 +121,14 @@ func (d Docker) runEgress(ctx context.Context, r Request, args []string, values 
 	if d.Egress.CAFile == "" {
 		return result, errors.New("egress ca_file is required")
 	}
-	if err := os.WriteFile(filepath.Join(r.Input, "egress-ca.pem"), nil, 0600); err != nil {
+	certs, hasKey, err := SplitCABundle(d.Egress.CAFile)
+	if err != nil {
+		return result, err
+	}
+	if !hasKey {
+		return result, fmt.Errorf("egress ca_file has no private key: %s", d.Egress.CAFile)
+	}
+	if err := os.WriteFile(filepath.Join(r.Input, "egress-ca.pem"), certs, 0600); err != nil {
 		return result, err
 	}
 	names := make([]string, 0, len(values))
@@ -385,9 +392,6 @@ func planDockerRun(p planRequest) (planResult, error) {
 		network = p.internalNetwork
 	}
 	argv := []string{"run", "--rm", "--name", p.harnessName, "--label", "reviewd.managed=true", "--init", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=256", "--memory=" + p.memory, "--cpus=" + p.cpus, "--user", p.uid + ":" + p.gid, "--network", network, "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m,mode=1777", "--tmpfs", "/home/reviewd:rw,nosuid,nodev,size=1g,mode=0700,uid=" + p.uid + ",gid=" + p.gid, "--tmpfs", "/workspace:rw,nosuid,nodev,size=2g,uid=" + p.uid + ",gid=" + p.gid, "--workdir", "/workspace", "--mount", "type=bind,src=" + p.source + ",dst=/source,readonly", "--mount", "type=bind,src=" + p.input + ",dst=/review,readonly", "--mount", "type=bind,src=" + p.base + ",dst=/review/base,readonly", "--tmpfs", "/output:rw,nosuid,nodev,size=8m,mode=0700,uid=" + p.uid + ",gid=" + p.gid, "--mount", "type=bind,src=" + p.binary + ",dst=/usr/local/bin/reviewd,readonly"}
-	if egress {
-		argv = append(argv, "--mount", "type=bind,src="+p.egress.CAFile+",dst="+egressCAPath+",readonly")
-	}
 	argv = append(argv, "--env", "HOME=/home/reviewd", "--env", "REVIEWD_OUTPUT=/output", "--env", "REVIEWD_INPUT=/review")
 	if p.owner != "" {
 		argv = append(argv, "--label", "reviewd.owner="+p.owner)
@@ -446,7 +450,7 @@ func planDockerRun(p planRequest) (planResult, error) {
 		if p.owner != "" {
 			proxy = append(proxy, "--label", "reviewd.owner="+p.owner)
 		}
-		proxy = append(proxy, "--user", p.uid+":"+p.gid, "--network", p.egress.Network)
+		proxy = append(proxy, "--pids-limit=256", "--memory="+p.memory, "--user", p.uid+":"+p.gid, "--network", p.egress.Network)
 		if p.egress.Network != "bridge" && p.egress.Network != "none" {
 			proxy = append(proxy, "--network-alias", "reviewd-egress")
 		}

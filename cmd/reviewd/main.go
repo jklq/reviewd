@@ -266,8 +266,10 @@ func doctor(c config.Config) error {
 		if err := json.Unmarshal(out, &healthcheck); err != nil || len(healthcheck.Test) == 0 || (len(healthcheck.Test) == 1 && healthcheck.Test[0] == "NONE") {
 			return errors.New("egress proxy image has no healthcheck")
 		}
-		if b, err := os.ReadFile(c.Egress.CAFile); err != nil || len(b) == 0 {
-			return fmt.Errorf("egress ca_file unreadable: %s", c.Egress.CAFile)
+		if _, hasKey, err := sandbox.SplitCABundle(c.Egress.CAFile); err != nil {
+			return fmt.Errorf("egress ca_file invalid: %w", err)
+		} else if !hasKey {
+			return fmt.Errorf("egress ca_file has no private key: %s", c.Egress.CAFile)
 		}
 		if strings.HasPrefix(c.Egress.Network, "reviewd-") {
 			if err := exec.CommandContext(ctx, "docker", "network", "inspect", c.Egress.Network).Run(); err != nil {
