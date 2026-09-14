@@ -1,0 +1,96 @@
+{
+  "appwrite-appwrite-11580": {
+    "head": "92b7760e9447e19768865e2f5c8d7587cf29a39f",
+    "status": "verified_by_source_inspection",
+    "control": false,
+    "exhaustive": false,
+    "bugs": [
+      {
+        "id": "audit-key-type",
+        "path": "app/controllers/shared/api.php",
+        "description": "The first handler sets the key-specific audit type on a clone. Later handlers clone the original nonempty user and replace the audit user with a session type, losing account/organization key attribution.",
+        "evidence": "Inspect key branch and both later setUser calls; treat both sites as one defect."
+      }
+    ]
+  },
+  "appwrite-appwrite-11717": {
+    "head": "1ffed1a886b0eb64de441cfe1e5270367da2f931",
+    "status": "excluded_preexisting",
+    "control": false,
+    "exhaustive": false,
+    "bugs": [],
+    "exclusion": "The empty-pool fallback already exists in the merge-base. A later fix is not proof that this PR introduced it."
+  },
+  "appwrite-appwrite-11615": {
+    "head": "d3c5a425e761b03c83d67efbf9553b58c850fc45",
+    "status": "verified_by_source_inspection",
+    "control": false,
+    "exhaustive": false,
+    "bugs": [
+      {
+        "id": "ignored-platform-id",
+        "path": "src/Appwrite/Platform/Modules/Project/Http/Project/Platforms/App/Create.php",
+        "description": "The app and web create actions accept and normalize platformId, then discard it and store a fresh random ID. Clients cannot create or subsequently address the requested ID.",
+        "evidence": "New App/Create.php and Web/Create.php construct $id with ID::unique() instead of the normalized parameter; count once across both endpoints."
+      }
+    ]
+  },
+  "oven-sh-bun-28486": {
+    "head": "7732028aee739c64907fe0001fd46d917c31b269",
+    "status": "verified_by_source_inspection",
+    "control": false,
+    "exhaustive": false,
+    "bugs": [
+      {
+        "id": "watch-output-shape",
+        "path": "src/bun.js/api/JSBundler.zig",
+        "description": "The watch rebuild callback exposes file-name strings in outputs, while its public BuildOutput contract requires BuildArtifact objects. Consumers reading artifact.path or Blob methods fail.",
+        "evidence": "onDevServerBuildComplete constructs string array and passes it as outputs; packages/bun-types/bun.d.ts BuildOutput requires BuildArtifact[]."
+      }
+    ]
+  },
+  "unkeyed-unkey-5461": {
+    "head": "cec0ca0aba05e8dd99128d5b1f177ba9faecf27f",
+    "status": "verified_by_source_inspection",
+    "control": false,
+    "exhaustive": false,
+    "bugs": [
+      {
+        "id": "request-header-forwarding",
+        "path": "web/apps/dashboard/proxy.ts",
+        "description": "The middleware writes x-current-path to response headers, but server-side auth reads request headers. The newly added preservation of the deep-link destination therefore does not reach its consumer.",
+        "evidence": "proxy.ts NextResponse.next({headers}) versus lib/auth.ts headers().get(\"x-current-path\")."
+      }
+    ]
+  },
+  "local-docs-control": {
+    "head": "3a766716dd5a143d7ce05e7e93148157482e199a",
+    "status": "verified_by_source_inspection",
+    "control": true,
+    "exhaustive": false,
+    "bugs": [],
+    "scope": "One added README directory entry; directory and described documents exist. No executable change."
+  },
+  "local-attribution-bug": {
+    "head": "def360f47fd7d56774ac4adc20c512e520771aa3",
+    "status": "verified_by_source_inspection",
+    "control": false,
+    "exhaustive": false,
+    "bugs": [
+      {
+        "id": "harness-name-limit",
+        "path": "internal/config/config.go",
+        "description": "Config accepts a 121-byte harness key, but the newly added report attribution rejects values over 120 bytes. Valid configuration therefore produces reviews that fail validation.",
+        "evidence": "Config.Validate checks the key pattern but only bounds h.Model; report attribution bounds all values; engine stamps the harness key into reports."
+      }
+    ]
+  },
+  "local-attribution-control": {
+    "head": "4086159af90633bbc2835a263d3f85ffe5916f31",
+    "status": "verified_by_source_inspection",
+    "control": true,
+    "exhaustive": false,
+    "bugs": [],
+    "scope": "Attribution metadata, validation and rendering change; includes the missing harness-name length check. Scoped source inspection found no actionable defect; not proof of absence."
+  }
+}

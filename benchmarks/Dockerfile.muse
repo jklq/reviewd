@@ -1,0 +1,11 @@
+# Benchmark-only Muse Code harness image. Build context is a staging directory
+# holding the host's statically linked muse binary (as "muse") and
+# muse-bounded.sh; see benchmarks/README.md. The reviewd reporting binary is
+# mounted into the sandbox at runtime, so the image does not need to ship it.
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git ripgrep python3 && rm -rf /var/lib/apt/lists/*
+COPY muse /usr/local/bin/muse
+COPY muse-bounded.sh /usr/local/bin/reviewbench-muse-bounded
+RUN chmod 0755 /usr/local/bin/muse /usr/local/bin/reviewbench-muse-bounded
+ENV HOME=/home/reviewd
+WORKDIR /workspace

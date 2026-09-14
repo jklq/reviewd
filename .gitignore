@@ -6,3 +6,7 @@
 *.pem
 .env
 /LOCAL.md
+
+/.benchmarks/
+
+/benchmarks/__pycache__/
