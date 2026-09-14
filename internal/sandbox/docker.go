@@ -19,6 +19,7 @@ import (
 	"reviewd/internal/credential"
 	"reviewd/internal/report"
 	"reviewd/internal/store"
+	"reviewd/internal/timing"
 )
 
 type Request struct {
@@ -56,6 +57,9 @@ func (l *limitedLog) Write(p []byte) (int, error) {
 }
 func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	var result report.Report
+	spanName := fmt.Sprintf("%s-%d/", r.Role, r.Index)
+	endRun := timing.Start(ctx, spanName+"sandbox")
+	defer endRun()
 	for _, p := range []string{r.Source, r.Base, r.Input, r.Output, d.Binary} {
 		if !filepath.IsAbs(p) {
 			return result, fmt.Errorf("sandbox paths must be absolute: %s", p)
@@ -82,7 +86,9 @@ func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	if d.Owner != "" {
 		argv = append(argv, "--label", "reviewd.owner="+d.Owner)
 	}
+	endCredentials := timing.Start(ctx, spanName+"credentials")
 	values, err := d.Credentials.Environment(ctx, r.Harness.Credentials)
+	endCredentials()
 	if err != nil {
 		return result, err
 	}
@@ -102,8 +108,9 @@ func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	// This shell program is fixed. All operator arguments and prompt text pass as
 	// positional arguments, never interpolated as shell source. Harness output goes
 	// to stderr; only the reporting CLI exports JSON on stdout.
-	setup := `mkdir -p /home/reviewd && cp -a /source/. /workspace/ && rm -f /workspace/AGENTS.md /workspace/agents.md && cp /review/AGENTS.md /workspace/AGENTS.md && cp /review/AGENTS.md /workspace/agents.md && "$@" >&2 && /usr/local/bin/reviewd agent export`
-	argv = append(argv, "--entrypoint", "/bin/sh", r.Harness.Image, "-c", setup, "reviewd-harness")
+	marker := phaseMarker(name)
+	setup := `printf '\n%sworkspace_copy\n' "$1" >&2; marker="$1"; shift; mkdir -p /home/reviewd && cp -a /source/. /workspace/ && rm -f /workspace/AGENTS.md /workspace/agents.md && cp /review/AGENTS.md /workspace/AGENTS.md && cp /review/AGENTS.md /workspace/agents.md && printf '\n%sharness\n' "$marker" >&2 && "$@" >&2 && printf '\n%sreport_export\n' "$marker" >&2 && /usr/local/bin/reviewd agent export`
+	argv = append(argv, "--entrypoint", "/bin/sh", r.Harness.Image, "-c", setup, "reviewd-harness", marker)
 	argv = append(argv, args...)
 	log, err := os.OpenFile(filepath.Join(r.Output, "harness.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
@@ -115,13 +122,20 @@ func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	cmd.Env = env
 	transport := &reportBuffer{}
 	cmd.Stdout = transport
-	cmd.Stderr = sink
+	phases := &phaseLog{sink: sink, marker: marker, ctx: ctx, name: spanName, end: timing.Start(ctx, spanName+"container_start")}
+	cmd.Stderr = phases
+	defer phases.close()
 	defer func() {
+		endCleanup := timing.Start(ctx, spanName+"cleanup")
+		defer endCleanup()
 		cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		_ = exec.CommandContext(cleanup, "docker", "rm", "-f", name).Run()
 	}()
-	if err = cmd.Run(); err != nil {
+	err = cmd.Run()
+	phases.close()
+	phases.end = func() {}
+	if err != nil {
 		return result, fmt.Errorf("%s harness failed: %w (see harness.log)", r.Role, err)
 	}
 	if transport.overflow {

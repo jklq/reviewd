@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import random
+import shutil
 import subprocess
 
 
@@ -18,18 +19,28 @@ def main():
     p.add_argument('--seed', type=int, default=20260914)
     p.add_argument('--timeout', default='6m')
     p.add_argument('--config', default='/etc/reviewd/reviewd.json')
+    p.add_argument('--resume', action='store_true', help='continue a matrix, skipping finished launches')
     p.add_argument('--output', required=True, type=Path)
     a = p.parse_args()
     if a.repeats < 1:
         p.error('repeats must be positive')
-    a.output.mkdir(parents=True, exist_ok=False)
-    plan = [(str(c.resolve()),s,r) for c in a.cases for s in a.strategies for r in range(1,a.repeats+1)]
-    random.Random(a.seed).shuffle(plan)
-    (a.output/'plan.json').write_text(json.dumps(dict(seed=a.seed, timeout=a.timeout,plan=plan),indent=2)+'\n')
+    if a.resume:
+        plan = [tuple(x) for x in json.loads((a.output/'plan.json').read_text())['plan']]
+    else:
+        a.output.mkdir(parents=True, exist_ok=False)
+        plan = [(str(c.resolve()),s,r) for c in a.cases for s in a.strategies for r in range(1,a.repeats+1)]
+        random.Random(a.seed).shuffle(plan)
+        (a.output/'plan.json').write_text(json.dumps(dict(seed=a.seed, timeout=a.timeout,plan=plan),indent=2)+'\n')
     for i,(case,strategy,repeat) in enumerate(plan):
         run = a.output/f'{i:03d}-{Path(case).name}-{strategy}-{repeat}'
         command = ['./bin/reviewbench','--config',a.config,'--case',case,'--strategy',strategy,'--timeout',a.timeout,'--output',str(run.resolve())]
         launch = a.output/(run.name+'.launch.json')
+        if a.resume and launch.exists() and json.loads(launch.read_text())['status'] == 'finished':
+            print(f'{i+1}/{len(plan)} skip {run.name}',flush=True)
+            continue
+        if run.exists():
+            subprocess.run(['docker','rm','-f']+subprocess.check_output(['docker','ps','-aq','--filter','label=reviewd.owner=benchmark:'+str(run.resolve())]).decode().split(),check=False)
+            shutil.rmtree(run)
         launch.write_text(json.dumps(dict(command=command,status='started'),indent=2)+'\n')
         print(f'{i+1}/{len(plan)} {run.name}',flush=True)
         result = subprocess.run(command, check=False)

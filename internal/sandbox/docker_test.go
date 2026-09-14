@@ -16,6 +16,7 @@ import (
 	"reviewd/internal/report"
 	"reviewd/internal/review"
 	"reviewd/internal/sandbox"
+	"reviewd/internal/timing"
 )
 
 // Runs real containers and the actual agent CLI, with a deterministic harness.
@@ -37,7 +38,8 @@ func TestDockerPipeline(t *testing.T) {
 	if b, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %s %v", b, err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, timings := timing.New(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	if b, err := exec.CommandContext(ctx, "docker", "pull", "alpine:3.21").CombinedOutput(); err != nil {
 		t.Fatalf("pull: %s %v", b, err)
@@ -122,6 +124,19 @@ printf '%s' '{"expires_at":"2035-01-01T00:00:00Z","env":{"HARNESS_AUTH":"test-ac
 	for _, stage := range []string{"reviewer-0", "reviewer-1", "reviewer-2", "validator-0"} {
 		if _, err = os.Stat(filepath.Join(dir, stage, "output", "report.json")); err != nil {
 			t.Fatal(err)
+		}
+	}
+	for _, stage := range []string{"reviewer-0", "reviewer-1", "reviewer-2", "validator-0"} {
+		for _, phase := range []string{"credentials", "container_start", "workspace_copy", "harness", "report_export", "cleanup"} {
+			found := false
+			for _, span := range timings.Spans() {
+				if span.Name == stage+"/"+phase {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("missing timing %s/%s", stage, phase)
+			}
 		}
 	}
 	// A killed/timed-out harness must be removed and cannot be treated as success.

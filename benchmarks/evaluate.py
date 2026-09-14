@@ -18,12 +18,40 @@ def event_metrics(run):
     counts = defaultdict(float)
     seen = set()
     for log in run.glob('*/output/harness.log'):
+        muse_tasks = {}
         for line in log.read_text(errors='replace').splitlines():
             try:
                 event = json.loads(line)
             except ValueError:
                 continue
             if not isinstance(event, dict):
+                continue
+            if 'payload_type' in event:
+                payload = event.get('payload', {})
+                if not isinstance(payload, dict):
+                    continue
+                stream = event.get('stream', {})
+                if not isinstance(stream, dict):
+                    stream = {}
+                identity = (str(log), stream.get('id'), event.get('id'))
+                if event.get('id') and identity in seen:
+                    continue
+                if event.get('id'):
+                    seen.add(identity)
+                kind = event['payload_type']
+                task = payload.get('event', {})
+                if not isinstance(task, dict):
+                    task = {}
+                task_id = task.get('task_id')
+                if kind == 'task.lifecycle.proposed':
+                    muse_tasks[task_id] = task.get('task_kind', '')
+                elif kind == 'task.lifecycle.started' and muse_tasks.get(task_id, '').startswith('model.'):
+                    counts['model_steps'] += 1
+                elif kind == 'tool.result':
+                    counts['tool_calls'] += 1
+                # Muse's recorded_at values in this image are not wall-clock
+                # timestamps. Use the host spans for latency; do not infer token
+                # totals or costs when the event stream does not expose them.
                 continue
             part = event.get('part', {})
             if not isinstance(part, dict):

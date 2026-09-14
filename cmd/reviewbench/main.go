@@ -20,7 +20,7 @@ func main() {
 	input := flag.String("case", "", "prepared case directory with head, base, files.json, context.json")
 	output := flag.String("output", "", "new output directory; must not exist")
 	binary := flag.String("agent-binary", "bin/reviewd", "reporting binary mounted into sandbox")
-	strategy := flag.String("strategy", "baseline", "baseline, single, preload, structural, targeted, sharded, bounded")
+	strategy := flag.String("strategy", "baseline", "baseline, single, preload, structural, targeted, conditional, bounded, sharded, sharded-N, sharded-adaptive")
 	steps := flag.Int("max-steps", 12, "model iterations for bounded strategy (1..64)")
 	timeout := flag.Duration("timeout", 20*time.Minute, "whole replay deadline")
 	adaptive := flag.Bool("adaptive-budget", true, "scale bounded steps/timeout by PR size (capped by --timeout)")

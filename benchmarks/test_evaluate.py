@@ -33,6 +33,22 @@ class EvaluationTests(unittest.TestCase):
             self.assertIsNone(result['adjudicated_precision'])
             self.assertEqual(result['runs_with_pending_adjudication'], 1)
 
+    def test_muse_counts_started_models_and_deduplicates_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root/'reviewer-0'/'output'
+            output.mkdir(parents=True)
+            events = [
+                dict(id='1', payload_type='task.lifecycle.proposed', payload=dict(event=dict(task_id='m', task_kind='model.meta.response'))),
+                dict(id='2', payload_type='task.lifecycle.started', payload=dict(event=dict(task_id='m'))),
+                dict(id='3', payload_type='task.lifecycle.proposed', payload=dict(event=dict(task_id='unused', task_kind='model.meta.response'))),
+                dict(id='4', payload_type='tool.result', payload={}),
+                dict(id='4', payload_type='tool.result', payload={}),
+                dict(id='5', payload_type='task.lifecycle.output', payload={}),
+            ]
+            (output/'harness.log').write_text('\n'.join(map(json.dumps, events)))
+            self.assertEqual(event_metrics(root), dict(model_steps=1, tool_calls=1))
+
     def test_plain_text_logs_are_not_json_events(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

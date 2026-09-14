@@ -96,14 +96,33 @@ GitHub revisions or import equivalent saved snapshots.
 | single | 1 reviewer | schema/diff only | lazy file reads |
 | preload | 1 reviewer | schema/diff only | bounded patches and changed file contents |
 | structural | 1 reviewer | schema/diff only | patches, Go AST declarations/call sites, neighboring paths |
-| targeted | 1 reviewer, suggested tool budget | candidate-focused validator | structural pack |
-| sharded | up to 3 reviewers, disjoint file assignments | candidate-focused validator | structural pack |
+| targeted | 1 reviewer, candidate-focused strategy | candidate-focused validator | structural pack |
+| sharded | `sharded-N` pins N reviewers, `sharded-adaptive` grows 1/2/4/6 with changed lines | candidate-focused validator | per-slice structural pack |
 | bounded | 1 read-only agent (OpenCode or Muse Code), enforced 12 model steps | trusted adapter + schema/diff only | structural pack |
+
+A single-pass arm at high reasoning (no validator) is run with
+`single`/`structural` and a config whose command uses `--variant high`; results
+are in [REPORT-single-high.md](REPORT-single-high.md). It found every labeled
+gold except the hard local-attribution case, with precision 1.0 and clean
+controls on nine runs.
+
+Sharded reviewers receive disjoint slices: `AssignShards` balances changed lines
+across slices and prefers keeping a directory in one slice. Each reviewer's
+`files.json` and structural context pack cover only its slice, so small PRs stay
+on one reviewer while large ones are split into bounded amounts of work. The
+validator still sees the full diff and pack, and `assignment.json` plus the
+`shards`, `shard_changed_lines`, `shard_file_counts` and `shard_context_bytes`
+metrics record the split. `sharded` keeps the historical cap of three reviewers.
+Fixed `sharded-N` levels are the control for the adaptive arm; both limit each
+reviewer's scope with the same prompt guidance. An interim sharding report with
+the completed measurements and why the matrix stopped early is in
+[REPORT-sharding.md](REPORT-sharding.md).
 
 The structural pack uses Go's parser, not a type-resolved call graph. Same-name
 calls are navigation hints; non-Go files get patches and neighboring paths,
 not AST analysis. Packs are capped at 64 KB with explicit truncation markers.
-Tool budgets in targeted/sharded prompts are suggestions and may be ignored.
+Prompts do not prescribe a tool-call count; only the bounded adapter enforces a
+step budget, through the harness configuration rather than prompt text.
 The bounded strategy uses the agent's step budget (`steps` for OpenCode,
 `--max-model-steps` for Muse Code) and a JSON-final-response adapter
 (`benchmarks/opencode-bounded.sh` or `benchmarks/muse-bounded.sh`, selected by
@@ -128,7 +147,7 @@ needed for these read-only experiments; bounded denies execution tools outright.
 python3 benchmarks/matrix.py \
   --config .benchmarks/config.json \
   --cases .benchmarks/cases/local-docs-control .benchmarks/cases/local-attribution-bug \
-  --strategies baseline single preload structural targeted sharded bounded \
+  --strategies baseline single preload structural targeted sharded-1 sharded-2 sharded-3 sharded-adaptive bounded \
   --repeats 3 --seed 20260914 --timeout 6m \
   --output .benchmarks/matrix
 
@@ -137,10 +156,10 @@ python3 benchmarks/adjudicate.py .benchmarks/matrix
 python3 benchmarks/evaluate.py .benchmarks/matrix
 ```
 
-The matrix shuffles order deterministically and runs one PR at a time (reviewers
-within a PR may run concurrently). Use a quiet host for comparison, paired cases,
-identical deadlines, and repeated trials. Keep cache conditions/provider load
-visible. Stratify by actual changed lines: small <100, medium <500, large <2000,
+The matrix shuffles order deterministically. Benchmark runs execute at most two
+concurrent runs per harness (codex, muse, opencode); reviewers within a baseline
+run may still run concurrently. Compare paired cases with identical deadlines and
+repeated trials, and keep cache conditions/provider load visible. Stratify by actual changed lines: small <100, medium <500, large <2000,
 very large >=2000. Match bugs by trigger and consequence, not wording or line
 number alone. Count a root cause once even if multiple findings describe it.
 
@@ -165,3 +184,26 @@ quality equivalence.
 Artifacts are private and operator-retained; snapshot downloads dominate disk
 use. Delete only completed benchmark output/cache directories when no replays
 use their snapshots. Leave `/var/lib/reviewd` and its live jobs alone.
+
+## Muse speed experiments
+
+`conditional` uses one ordinary reviewer with lazy reads. Empty findings return
+that report unchanged (including its confidence and coverage limitations);
+nonempty findings trigger a candidate-focused validator. This is an experimental
+precision/latency tradeoff: an empty report can still have missed a bug. The
+production engine's unconditional independent validator is unchanged.
+
+Use an ordinary Muse CLI harness for `baseline`, `single`, and `conditional`;
+the older `.benchmarks/muse.json` may instead invoke the bounded JSON adapter.
+For a controlled comparison, use the same Muse model, reasoning effort and
+command in all three approaches. The speed experiment uses `muse-spark-1.3`,
+max reasoning, JSON event logs, and the normal `reviewd agent submit` protocol.
+See [the Muse speed report](REPORT-muse-speed.md) for the exact setup and results.
+
+`metrics.json.timings` records the engine and sandbox spans described in
+[deployment timings](../docs/deployment.md#stage-timings). Replay inputs are
+already prepared; queue wait, GitHub publication and cold snapshot downloads are
+**not measured** by these replay runs. Missing spans do not mean zero latency.
+Muse model steps count started model tasks, tools count result events, and
+replayed event IDs are deduplicated per session. Provider tokens/costs are not
+inferred when absent from the JSON events.

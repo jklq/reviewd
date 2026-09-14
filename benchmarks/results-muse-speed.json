@@ -1,0 +1,343 @@
+{
+  "generated": "2026-09-14T22:38:31+02:00",
+  "policy": "at most two concurrent benchmark runs per harness",
+  "arms": [
+    {
+      "arm": "muse-baseline",
+      "strategy": "baseline",
+      "runs": 3,
+      "median_seconds": 425.979570453,
+      "p95_seconds": 584.011864128,
+      "failures": 0,
+      "precision": 0.9,
+      "gold_recall": 1.0,
+      "control_finding_rate": 1.0
+    },
+    {
+      "arm": "muse-single",
+      "strategy": "single",
+      "runs": 3,
+      "median_seconds": 220.768080795,
+      "p95_seconds": 260.200375812,
+      "failures": 0,
+      "precision": 1.0,
+      "gold_recall": 1.0,
+      "control_finding_rate": 0.0
+    },
+    {
+      "arm": "muse-conditional",
+      "strategy": "conditional",
+      "runs": 3,
+      "median_seconds": 259.003017565,
+      "p95_seconds": 316.501922495,
+      "failures": 0,
+      "precision": 1.0,
+      "gold_recall": 1.0,
+      "control_finding_rate": 0.0
+    },
+    {
+      "arm": "luna-high",
+      "strategy": "single",
+      "runs": 3,
+      "median_seconds": 243.339048678,
+      "p95_seconds": 388.908240323,
+      "failures": 0,
+      "precision": 1.0,
+      "gold_recall": 1.0,
+      "control_finding_rate": 1.0
+    },
+    {
+      "arm": "luna-fast",
+      "strategy": "single",
+      "runs": 3,
+      "median_seconds": 158.47921699,
+      "p95_seconds": 200.260466344,
+      "failures": 0,
+      "precision": 1.0,
+      "gold_recall": 1.0,
+      "control_finding_rate": 0.0
+    },
+    {
+      "arm": "luna-xhigh-fast",
+      "strategy": "single",
+      "runs": 3,
+      "median_seconds": 252.192512178,
+      "p95_seconds": 384.908303239,
+      "failures": 0,
+      "precision": 1.0,
+      "gold_recall": 1.0,
+      "control_finding_rate": 1.0
+    }
+  ],
+  "runs": [
+    {
+      "arm": "muse-baseline",
+      "run": "000-appwrite-appwrite-11615-d3c5a425-baseline-1",
+      "case": "large-1503",
+      "changed_lines": 1503,
+      "seconds": 584.0,
+      "error": "",
+      "findings": 8,
+      "verdicts": {
+        "true_positive": 8
+      },
+      "matched_gold": [
+        "ignored-platform-id"
+      ]
+    },
+    {
+      "arm": "muse-baseline",
+      "run": "003-appwrite-appwrite-11580-92b7760e-baseline-1",
+      "case": "small-34",
+      "changed_lines": 34,
+      "seconds": 426.0,
+      "error": "",
+      "findings": 1,
+      "verdicts": {
+        "true_positive": 1
+      },
+      "matched_gold": [
+        "audit-key-type"
+      ]
+    },
+    {
+      "arm": "muse-baseline",
+      "run": "008-local-attribution-control-baseline-1",
+      "case": "control-139",
+      "changed_lines": 139,
+      "seconds": 348.7,
+      "error": "",
+      "findings": 1,
+      "verdicts": {
+        "false_positive": 1
+      },
+      "matched_gold": []
+    },
+    {
+      "arm": "muse-single",
+      "run": "001-appwrite-appwrite-11580-92b7760e-single-1",
+      "case": "small-34",
+      "changed_lines": 34,
+      "seconds": 220.8,
+      "error": "",
+      "findings": 1,
+      "verdicts": {
+        "true_positive": 1
+      },
+      "matched_gold": [
+        "audit-key-type"
+      ]
+    },
+    {
+      "arm": "muse-single",
+      "run": "004-appwrite-appwrite-11615-d3c5a425-single-1",
+      "case": "large-1503",
+      "changed_lines": 1503,
+      "seconds": 260.2,
+      "error": "",
+      "findings": 8,
+      "verdicts": {
+        "true_positive": 8
+      },
+      "matched_gold": [
+        "ignored-platform-id"
+      ]
+    },
+    {
+      "arm": "muse-single",
+      "run": "007-local-attribution-control-single-1",
+      "case": "control-139",
+      "changed_lines": 139,
+      "seconds": 123.5,
+      "error": "",
+      "findings": 0,
+      "verdicts": {},
+      "matched_gold": []
+    },
+    {
+      "arm": "muse-conditional",
+      "run": "002-local-attribution-control-conditional-1",
+      "case": "control-139",
+      "changed_lines": 139,
+      "seconds": 135.5,
+      "error": "",
+      "findings": 0,
+      "verdicts": {},
+      "matched_gold": []
+    },
+    {
+      "arm": "muse-conditional",
+      "run": "005-appwrite-appwrite-11580-92b7760e-conditional-1",
+      "case": "small-34",
+      "changed_lines": 34,
+      "seconds": 259.0,
+      "error": "",
+      "findings": 1,
+      "verdicts": {
+        "true_positive": 1
+      },
+      "matched_gold": [
+        "audit-key-type"
+      ]
+    },
+    {
+      "arm": "muse-conditional",
+      "run": "006-appwrite-appwrite-11615-d3c5a425-conditional-1",
+      "case": "large-1503",
+      "changed_lines": 1503,
+      "seconds": 316.5,
+      "error": "",
+      "findings": 7,
+      "verdicts": {
+        "true_positive": 7
+      },
+      "matched_gold": [
+        "ignored-platform-id"
+      ]
+    },
+    {
+      "arm": "luna-high",
+      "run": "000-appwrite-appwrite-11580-92b7760e-single-1",
+      "case": "small-34",
+      "changed_lines": 34,
+      "seconds": 175.7,
+      "error": "",
+      "findings": 2,
+      "verdicts": {
+        "true_positive": 2
+      },
+      "matched_gold": [
+        "audit-key-type"
+      ]
+    },
+    {
+      "arm": "luna-high",
+      "run": "001-local-attribution-control-single-1",
+      "case": "control-139",
+      "changed_lines": 139,
+      "seconds": 243.3,
+      "error": "",
+      "findings": 1,
+      "verdicts": {
+        "true_positive": 1
+      },
+      "matched_gold": []
+    },
+    {
+      "arm": "luna-high",
+      "run": "002-appwrite-appwrite-11615-d3c5a425-single-1",
+      "case": "large-1503",
+      "changed_lines": 1503,
+      "seconds": 388.9,
+      "error": "",
+      "findings": 7,
+      "verdicts": {
+        "true_positive": 7
+      },
+      "matched_gold": [
+        "ignored-platform-id"
+      ]
+    },
+    {
+      "arm": "luna-fast",
+      "run": "000-appwrite-appwrite-11580-92b7760e-single-1",
+      "case": "small-34",
+      "changed_lines": 34,
+      "seconds": 158.5,
+      "error": "",
+      "findings": 2,
+      "verdicts": {
+        "true_positive": 2
+      },
+      "matched_gold": [
+        "audit-key-type"
+      ]
+    },
+    {
+      "arm": "luna-fast",
+      "run": "001-appwrite-appwrite-11615-d3c5a425-single-1",
+      "case": "large-1503",
+      "changed_lines": 1503,
+      "seconds": 200.3,
+      "error": "",
+      "findings": 5,
+      "verdicts": {
+        "true_positive": 5
+      },
+      "matched_gold": [
+        "ignored-platform-id"
+      ]
+    },
+    {
+      "arm": "luna-fast",
+      "run": "002-local-attribution-control-single-1",
+      "case": "control-139",
+      "changed_lines": 139,
+      "seconds": 113.3,
+      "error": "",
+      "findings": 0,
+      "verdicts": {},
+      "matched_gold": []
+    },
+    {
+      "arm": "luna-xhigh-fast",
+      "run": "000-appwrite-appwrite-11580-92b7760e-single-1",
+      "case": "small-34",
+      "changed_lines": 34,
+      "seconds": 242.8,
+      "error": "",
+      "findings": 2,
+      "verdicts": {
+        "true_positive": 2
+      },
+      "matched_gold": [
+        "audit-key-type"
+      ]
+    },
+    {
+      "arm": "luna-xhigh-fast",
+      "run": "001-appwrite-appwrite-11615-d3c5a425-single-1",
+      "case": "large-1503",
+      "changed_lines": 1503,
+      "seconds": 384.9,
+      "error": "",
+      "findings": 6,
+      "verdicts": {
+        "true_positive": 6
+      },
+      "matched_gold": [
+        "ignored-platform-id"
+      ]
+    },
+    {
+      "arm": "luna-xhigh-fast",
+      "run": "002-local-attribution-control-single-1",
+      "case": "control-139",
+      "changed_lines": 139,
+      "seconds": 252.2,
+      "error": "",
+      "findings": 1,
+      "verdicts": {
+        "true_positive": 1
+      },
+      "matched_gold": []
+    }
+  ],
+  "retained_failures": [
+    {
+      "run": "000-appwrite-appwrite-11580-92b7760e-single-1",
+      "seconds": 112.0,
+      "error": "reviewer 0: reviewer harness failed: exit status 1 (see harness.log)"
+    },
+    {
+      "run": "001-appwrite-appwrite-11615-d3c5a425-single-1",
+      "seconds": 110.3,
+      "error": "reviewer 0: reviewer harness failed: exit status 1 (see harness.log)"
+    },
+    {
+      "run": "002-local-attribution-control-single-1",
+      "seconds": 4.5,
+      "error": "reviewer 0: reviewer harness failed: exit status 1 (see harness.log)"
+    }
+  ]
+}

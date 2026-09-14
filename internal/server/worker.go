@@ -14,6 +14,7 @@ import (
 	"reviewd/internal/report"
 	"reviewd/internal/review"
 	"reviewd/internal/store"
+	"reviewd/internal/timing"
 )
 
 type Worker struct {
@@ -165,8 +166,26 @@ func (w Worker) reactions(ctx context.Context, c *github.Client, j *store.Job, c
 
 // Run reconciles job state, produces the report, and publishes the review.
 func (w Worker) Run(ctx context.Context, j *store.Job) error {
+	ctx, timings := timing.New(ctx)
+	if j.Status == "running" && !j.Next.IsZero() && !j.Updated.Before(j.Next) {
+		timings.Add("queue_ready_wait", j.Next, j.Updated)
+	}
+	end := timing.Start(ctx, "job_attempt")
+	defer func() {
+		end()
+		dir := w.Store.RunDir(j.ID)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			slog.Warn("create timing directory", "error", err)
+			return
+		}
+		if err := store.WriteJSON(filepath.Join(dir, fmt.Sprintf("timings-%d.json", j.Attempts)), timings.Spans()); err != nil {
+			slog.Warn("save timings", "error", err)
+		}
+	}()
 	c := w.App.Installation(j.Installation)
+	endReconcile := timing.Start(ctx, "github_reconcile")
 	p, err := w.reconcile(ctx, c, j)
+	endReconcile()
 	if err != nil {
 		return err
 	}
@@ -174,6 +193,8 @@ func (w Worker) Run(ctx context.Context, j *store.Job) error {
 	if err != nil {
 		return err
 	}
+	endPublish := timing.Start(ctx, "github_publish")
+	defer endPublish()
 	return w.publish(ctx, c, j, result)
 }
 
@@ -266,14 +287,18 @@ func (w Worker) produce(ctx context.Context, c *github.Client, j *store.Job, p g
 		}
 		return result, result.Validate()
 	}
+	endDiff := timing.Start(ctx, "github_diff")
 	files, err := c.Files(ctx, j.Repo, j.Number)
+	endDiff()
 	if err != nil {
 		return result, err
 	}
 	if len(files) != p.ChangedFiles {
 		return result, errors.New("changed-file count mismatch; PR moved or GitHub truncated the diff")
 	}
+	endMergeBase := timing.Start(ctx, "github_merge_base")
 	mergeBase, err := c.MergeBase(ctx, j.Repo, p.Base.SHA, p.Head.SHA)
+	endMergeBase()
 	if err != nil {
 		return result, err
 	}
@@ -290,7 +315,10 @@ func (w Worker) produce(ctx context.Context, c *github.Client, j *store.Job, p g
 		if err = os.RemoveAll(target); err != nil {
 			return result, err
 		}
-		if err = c.Snapshot(ctx, j.Repo, sha, target); err != nil {
+		endSnapshot := timing.Start(ctx, "snapshot_"+name)
+		err = c.Snapshot(ctx, j.Repo, sha, target)
+		endSnapshot()
+		if err != nil {
 			return result, err
 		}
 	}

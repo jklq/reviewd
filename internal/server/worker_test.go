@@ -24,6 +24,7 @@ import (
 	"reviewd/internal/review"
 	"reviewd/internal/sandbox"
 	"reviewd/internal/store"
+	"reviewd/internal/timing"
 )
 
 type workerRunner struct {
@@ -247,5 +248,40 @@ func TestCompletionStorageFailureAllowsShutdown(t *testing.T) {
 	cancel()
 	if err := w.saveCompletion(ctx, j); err != context.Canceled {
 		t.Fatal(err)
+	}
+}
+
+func TestAttemptTimingsPersistAfterSupersession(t *testing.T) {
+	w, j, f, _ := setupWorker(t)
+	j.Status = "running"
+	j.Attempts = 2
+	j.Next = time.Now().Add(-2 * time.Second)
+	j.Updated = j.Next.Add(time.Second)
+	f.head = strings.Repeat("c", 40)
+	if err := w.Run(context.Background(), j); err != errStale {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(w.Store.RunDir(j.ID), "timings-2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spans []timing.Span
+	if err := json.Unmarshal(b, &spans); err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]timing.Span{}
+	for _, span := range spans {
+		found[span.Name] = span
+	}
+	if found["queue_ready_wait"].Seconds != 1 || found["queue_ready_wait"].StartSeconds >= 0 {
+		t.Fatal(spans)
+	}
+	for _, name := range []string{"github_reconcile", "job_attempt"} {
+		if _, ok := found[name]; !ok {
+			t.Fatal(spans)
+		}
+	}
+	if _, ok := found["github_publish"]; ok {
+		t.Fatal("invented publication timing")
 	}
 }

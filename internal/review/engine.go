@@ -12,6 +12,7 @@ import (
 	"reviewd/internal/report"
 	"reviewd/internal/sandbox"
 	"reviewd/internal/store"
+	"reviewd/internal/timing"
 )
 
 type Context struct {
@@ -35,6 +36,8 @@ type Engine struct {
 }
 
 func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []report.ChangedFile) (report.Report, error) {
+	end := timing.Start(ctx, "review_engine")
+	defer end()
 	diff, err := report.ParseDiff(files)
 	if err != nil {
 		return report.Report{}, err
@@ -98,6 +101,8 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 	return result, nil
 }
 func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []report.ChangedFile, role string, index int, harness string, candidates []report.Report) (report.Report, error) {
+	end := timing.Start(ctx, fmt.Sprintf("%s-%d/stage", role, index))
+	defer end()
 	work := filepath.Join(dir, fmt.Sprintf("%s-%d", role, index))
 	if err := os.RemoveAll(work); err != nil {
 		return report.Report{}, err

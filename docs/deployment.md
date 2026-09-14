@@ -124,3 +124,25 @@ Each harness has: read-only image, no Linux capabilities, no privilege escalatio
 Processes run as the daemon's numeric UID/GID. Network `bridge` allows Internet access. Use dedicated host and restricted `reviewd-*` network where threat model requires.
 
 Docker is not a security boundary against hostile kernel exploits. Prefer isolated host/VM for public fork reviews. Default leaves fork reviews disabled and restricts manual triggers to repository collaborators. Operator CLI is trusted and controlled by OS permissions.
+
+## Stage timings
+
+Each job attempt writes `runs/JOB_ID/timings-N.json`, including failed and
+superseded attempts. Spans contain a name, start offset and wall-clock seconds.
+Queue wait measures time from eligibility (`Next`) to claim, excluding scheduled
+retry backoff; its start offset precedes the attempt and is usually negative.
+GitHub reconciliation, diff/merge-base requests, head/base snapshot downloads,
+reviewer/validator stages and publication are measured separately.
+
+Sandbox spans distinguish credential resolution, container startup, workspace
+copy, harness execution, report export/container exit and explicit cleanup.
+Container phase boundaries use fixed wrapper markers observed on the host;
+Docker output buffering can slightly shift them. These are diagnostic timings,
+not trusted review evidence. An interrupted phase records elapsed time without
+inventing later phases. Harness time includes CLI startup and provider/tool work;
+it is not a pure inference measurement.
+
+Spans overlap: the engine includes concurrent reviewer stages, and each stage
+includes its sandbox spans. Do not sum all durations. Compare the slowest
+reviewer with the subsequent validator to identify the critical path. Timing
+write errors are logged and do not turn a published review into a failed job.
