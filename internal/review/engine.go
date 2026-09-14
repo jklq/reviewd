@@ -126,6 +126,9 @@ func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []
 		prompt += " Independently validate and semantically deduplicate /review/candidates.json; report only substantiated findings and reassess merge confidence."
 	}
 	result, err := eng.Runner.Run(ctx, sandbox.Request{Harness: eng.Config.Harnesses[harness], Source: filepath.Join(dir, "head"), Base: filepath.Join(dir, "base"), Input: input, Output: output, Role: role, Index: index, Prompt: prompt})
+	if err != nil {
+		return result, err
+	}
 	// The server knows the configured harness and declared model even when the
 	// agent does not report its own; keep the operator's values as the fallback.
 	if result.Harness == "" {
@@ -134,5 +137,5 @@ func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []
 	if result.Model == "" {
 		result.Model = eng.Config.Harnesses[harness].Model
 	}
-	return result, err
+	return result, nil
 }

@@ -38,9 +38,9 @@ type Report struct {
 	Findings        []Finding `json:"findings"`
 }
 
-// Attribution names are untrusted display text placed in the published review.
-// They must stay single-line and bounded.
-func validateAttribution(name, value string) error {
+// ValidateAttribution bounds untrusted display text placed in the published
+// review, such as harness and model names: single-line and bounded.
+func ValidateAttribution(name, value string) error {
 	if len(value) > 120 || strings.ContainsAny(value, "\x00\r\n") {
 		return fmt.Errorf("%s must be a single line of at most 120 bytes", name)
 	}
@@ -69,10 +69,10 @@ func (r Report) Validate() error {
 	if strings.TrimSpace(r.Summary) == "" || len(r.Summary) > 2000 {
 		return errors.New("summary is required (<=2000 bytes)")
 	}
-	if err := validateAttribution("model", r.Model); err != nil {
+	if err := ValidateAttribution("model", r.Model); err != nil {
 		return err
 	}
-	if err := validateAttribution("harness", r.Harness); err != nil {
+	if err := ValidateAttribution("harness", r.Harness); err != nil {
 		return err
 	}
 	if r.Confidence == nil || *r.Confidence < 0 || *r.Confidence > 5 {

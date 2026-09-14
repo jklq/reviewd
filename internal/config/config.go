@@ -16,6 +16,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"reviewd/internal/report"
 )
 
 type Harness struct {
@@ -177,8 +179,8 @@ func (c Config) Validate() error {
 		if !name.MatchString(n) || h.Image == "" || strings.HasPrefix(h.Image, "-") || len(h.Command) == 0 || h.Command[0] == "" {
 			return fmt.Errorf("invalid harness %q", n)
 		}
-		if len(h.Model) > 120 || strings.ContainsAny(h.Model, "\x00\r\n") {
-			return fmt.Errorf("%s: model must be a single line of at most 120 bytes", n)
+		if err := report.ValidateAttribution("model", h.Model); err != nil {
+			return fmt.Errorf("%s: %w", n, err)
 		}
 		if h.Network != "bridge" && h.Network != "none" && !strings.HasPrefix(h.Network, "reviewd-") {
 			return fmt.Errorf("%s: network must be bridge, none or reviewd-*", n)

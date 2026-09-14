@@ -127,6 +127,7 @@ func (w Webhook) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(202)
 	_ = json.NewEncoder(rw).Encode(map[string]any{"id": job.ID, "created": created})
 }
+
 // reviewMention matches the bare @reviewd handle as a standalone token, so
 // ordinary prose like "seems fine\n\n@reviewd" still requests a review.
 var reviewMention = regexp.MustCompile(`(?:^|[^\w@])@reviewd(?:[^\w]|$)`)
