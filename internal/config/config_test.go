@@ -110,6 +110,62 @@ func TestConfigRejectsUnsafeSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+func TestSizeTierSelection(t *testing.T) {
+	parallelism := 2
+	c := Default()
+	c.Harnesses["fast"] = c.Harnesses["codex"]
+	c.SizeTiers = []SizeTier{
+		{Name: "small", MaxLines: 50, MaxFiles: 5, Reviewers: []string{"fast"}, Parallelism: &parallelism},
+		{Name: "medium", MaxLines: 500, Reviewers: []string{"codex"}},
+		{Name: "large", Reviewers: []string{"codex", "fast"}},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		lines, files int
+		tier         string
+		reviewers    []string
+		parallelism  int
+	}{
+		{10, 2, "small", []string{"fast"}, 2},
+		{10, 20, "medium", []string{"codex"}, 1},
+		{400, 2, "medium", []string{"codex"}, 1},
+		{5000, 100, "large", []string{"codex", "fast"}, 1},
+	} {
+		sel := c.Select(tc.lines, tc.files)
+		if sel.Tier != tc.tier || !reflect.DeepEqual(sel.Reviewers, tc.reviewers) || sel.Validator != "codex" || sel.Parallelism != tc.parallelism {
+			t.Fatalf("lines=%d files=%d: %+v", tc.lines, tc.files, sel)
+		}
+	}
+	// No tier matches: top-level reviewers, validator and parallelism apply.
+	c.SizeTiers = c.SizeTiers[:1]
+	sel := c.Select(5000, 100)
+	if sel.Tier != "" || !reflect.DeepEqual(sel.Reviewers, c.Reviewers) || sel.Validator != c.Validator || sel.Parallelism != c.Parallelism {
+		t.Fatalf("fallback: %+v", sel)
+	}
+}
+
+func TestSizeTierValidation(t *testing.T) {
+	parallelism := 0
+	for _, tiers := range [][]SizeTier{
+		{{Reviewers: []string{"missing"}}},
+		{{Reviewers: []string{"codex"}, Validator: "missing"}},
+		{{Reviewers: []string{"codex"}, Parallelism: &parallelism}},
+		{{Reviewers: []string{"codex"}, MaxLines: -1}},
+		{{Name: "bad\nname", Reviewers: []string{"codex"}}},
+		{{Name: "dup", Reviewers: []string{"codex"}}, {Name: "dup", Reviewers: []string{"codex"}}},
+		{{Reviewers: []string{"codex"}}, {Reviewers: []string{"codex"}}}, // catch-all first swallows the rest
+		{{MaxLines: 500, Reviewers: []string{"codex"}}, {MaxLines: 100, Reviewers: []string{"codex"}}},
+	} {
+		c := Default()
+		c.SizeTiers = tiers
+		if c.Validate() == nil {
+			t.Fatalf("invalid tiers accepted: %+v", tiers)
+		}
+	}
+}
+
 func TestStrictDecode(t *testing.T) {
 	for _, s := range []string{`{"unknown":true}`, `{} {}`} {
 		var c Config

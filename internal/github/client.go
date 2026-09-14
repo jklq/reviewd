@@ -164,6 +164,8 @@ type PR struct {
 	State        string `json:"state"`
 	Draft        bool   `json:"draft"`
 	ChangedFiles int    `json:"changed_files"`
+	Additions    int    `json:"additions"`
+	Deletions    int    `json:"deletions"`
 	Head         struct {
 		SHA  string `json:"sha"`
 		Repo struct {

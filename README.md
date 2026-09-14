@@ -79,7 +79,8 @@ reviewd review --repo owner/repo --pr 42 --installation INSTALLATION_ID
 
 Edit `reviewd.json` and restart. `parallelism` controls reviewers per PR.
 `workers` controls concurrent PRs. `reviewers` selects harnesses round-robin.
-`validator` selects the independent final pass.
+`validator` selects the independent final pass. `size_tiers` optionally routes
+PRs of different sizes to different harness sets.
 
 Each harness defines an image and a command argument array containing
 `{{.Prompt}}` or `{{.PromptFile}}`, and may declare the `model` its command

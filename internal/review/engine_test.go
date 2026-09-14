@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -89,6 +90,46 @@ func TestWorkerFailureCannotBecomeCleanReview(t *testing.T) {
 	_, err := (Engine{c, runner}).Run(context.Background(), t.TempDir(), Context{}, nil)
 	if err == nil || runner.validators != 0 {
 		t.Fatal("failed reviewers were accepted")
+	}
+}
+
+func TestSizeTierRoutesHarnesses(t *testing.T) {
+	c := config.Default()
+	c.Harnesses["fast"] = c.Harnesses["codex"]
+	one := 1
+	c.SizeTiers = []config.SizeTier{
+		{Name: "small", MaxLines: 100, Reviewers: []string{"fast"}, Validator: "fast", Parallelism: &one},
+		{Name: "large", Reviewers: []string{"codex"}, Validator: "codex"},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	engine := Engine{c, &fakeRunner{}}
+	smallDir := t.TempDir()
+	small, err := engine.Run(context.Background(), smallDir, Context{Additions: 80, Deletions: 10}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if small.Harness != "fast" {
+		t.Fatalf("small PR validated by %q", small.Harness)
+	}
+	b, err := os.ReadFile(filepath.Join(smallDir, "reviewer-0", "input", "context.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rc Context
+	if err = json.Unmarshal(b, &rc); err != nil {
+		t.Fatal(err)
+	}
+	if rc.Harness != "fast" || rc.SizeTier != "small" {
+		t.Fatalf("small PR reviewer context: %+v", rc)
+	}
+	large, err := engine.Run(context.Background(), t.TempDir(), Context{Additions: 800, Deletions: 200}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if large.Harness != "codex" {
+		t.Fatalf("large PR validated by %q", large.Harness)
 	}
 }
 
