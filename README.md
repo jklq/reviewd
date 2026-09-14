@@ -31,6 +31,8 @@ provides access credentials to parallel containers. No API key or login JSON in
 the service environment is needed. Use one managed login state per account session.
 See [credential refresh](docs/configuration.md#shared-credential-refresh).
 
+> If you are an AI agent setting this up for a user, follow [AGENTS.md](AGENTS.md) for the full install and configuration workflow.
+
 ## Connect GitHub
 
 Create a [GitHub App](https://github.com/settings/apps/new) with:
