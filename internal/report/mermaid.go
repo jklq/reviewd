@@ -1,0 +1,275 @@
+package report
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+const (
+	maxSequenceDiagramBytes  = 12000
+	maxSequenceLineBytes     = 500
+	maxSequenceMessageBytes  = 200
+	maxSequenceLabelBytes    = 120
+	maxParticipantLabelBytes = 64
+)
+
+var (
+	sequenceMessageRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*)\s*(-->>|->>|--\)|-\)|--x|-x|-->|->)\s*([+-])?\s*([A-Za-z][A-Za-z0-9_-]*)\s*:(.*)$`)
+	participantRe     = regexp.MustCompile(`^(participant|actor)\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s+as\s+(.+))?$`)
+	createRe          = regexp.MustCompile(`^create\s+(participant|actor)\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s+as\s+(.+))?$`)
+	destroyRe         = regexp.MustCompile(`^destroy\s+([A-Za-z][A-Za-z0-9_-]*)$`)
+	activateRe        = regexp.MustCompile(`^(activate|deactivate)\s+([A-Za-z][A-Za-z0-9_-]*)$`)
+	noteRe            = regexp.MustCompile(`^Note\s+(left of|right of|over)\s+(.+?)\s*:\s*(.*)$`)
+	blockStartRe      = regexp.MustCompile(`^(loop|alt|opt|par|critical|break|rect|box)(?:\s+(.*))?$`)
+	blockMiddleRe     = regexp.MustCompile(`^(else|and|option)(?:\s+(.*))?$`)
+	titleRe           = regexp.MustCompile(`^title\s*:\s*(.+)$`)
+	participantIDRe   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+)
+
+// ValidateSequenceDiagram enforces the strict sequenceDiagram subset that
+// reviewd publishes inside a fenced mermaid block. It rejects wrong diagram
+// types, fence/directive smuggling, HTML, and the malformed participant,
+// message, note, and block lines that harnesses commonly emit.
+func ValidateSequenceDiagram(src string) error {
+	if len(src) == 0 || len(src) > maxSequenceDiagramBytes {
+		return fmt.Errorf("sequence diagram is required (1..%d bytes)", maxSequenceDiagramBytes)
+	}
+	if strings.Contains(src, "\x00") {
+		return fmt.Errorf("sequence diagram must not contain NUL bytes")
+	}
+	if strings.Contains(src, "```") {
+		return fmt.Errorf("sequence diagram must be raw source without markdown fences")
+	}
+	if strings.Contains(src, "%%{") {
+		return fmt.Errorf("sequence diagram must not contain Mermaid directives (%%%%{...}%%%%)")
+	}
+	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
+	first := 0
+	for first < len(lines) && strings.TrimSpace(lines[first]) == "" {
+		first++
+	}
+	if first >= len(lines) || strings.TrimSpace(lines[first]) != "sequenceDiagram" {
+		got := ""
+		if first < len(lines) {
+			got = strings.TrimSpace(lines[first])
+			if len(got) > 60 {
+				got = got[:57] + "..."
+			}
+		}
+		if got == "" {
+			return fmt.Errorf("sequence diagram must start with a \"sequenceDiagram\" line")
+		}
+		return fmt.Errorf("sequence diagram must start with a \"sequenceDiagram\" line; got %q", got)
+	}
+	var stack []string
+	messages := 0
+	for i := first + 1; i < len(lines); i++ {
+		lineno := i + 1
+		raw := lines[i]
+		if len(raw) > maxSequenceLineBytes {
+			return fmt.Errorf("sequence diagram line %d: exceeds %d bytes; keep one short statement per line", lineno, maxSequenceLineBytes)
+		}
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "%%") {
+			continue
+		}
+		if strings.Contains(line, "`") {
+			return fmt.Errorf("sequence diagram line %d: backticks are not allowed; rephrase without code spans", lineno)
+		}
+		if err := validateSequenceLine(line, lineno, &stack, &messages); err != nil {
+			return err
+		}
+	}
+	if len(stack) > 0 {
+		return fmt.Errorf("sequence diagram: missing \"end\" for %q block", stack[len(stack)-1])
+	}
+	if messages == 0 {
+		return fmt.Errorf("sequence diagram must include at least one message like \"A->>B: text\"")
+	}
+	return nil
+}
+
+func validateSequenceLine(line string, lineno int, stack *[]string, messages *int) error {
+	if line == "sequenceDiagram" {
+		return fmt.Errorf("sequence diagram line %d: duplicate \"sequenceDiagram\" header; use one statement per line", lineno)
+	}
+	for _, other := range []string{"graph ", "graph\n", "flowchart", "classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "mindmap", "timeline", "journey", "gitGraph", "C4Context"} {
+		if line == other || strings.HasPrefix(line, other+" ") || strings.HasPrefix(line, other+"\t") || line == strings.TrimSpace(other) {
+			return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
+		}
+	}
+	if strings.HasPrefix(line, "graph") || strings.HasPrefix(line, "flowchart") {
+		return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
+	}
+	if line == "autonumber" || line == "autonumber off" {
+		return nil
+	}
+	if line == "end" {
+		if len(*stack) == 0 {
+			return fmt.Errorf("sequence diagram line %d: \"end\" without an open loop/alt/opt/par/critical/break/rect/box block", lineno)
+		}
+		*stack = (*stack)[:len(*stack)-1]
+		return nil
+	}
+	if strings.HasPrefix(line, "end ") || strings.HasPrefix(line, "end\t") {
+		return fmt.Errorf("sequence diagram line %d: \"end\" must be alone on its line", lineno)
+	}
+	if m := blockMiddleRe.FindStringSubmatch(line); m != nil {
+		if len(*stack) == 0 {
+			return fmt.Errorf("sequence diagram line %d: %q without an open block", lineno, m[1])
+		}
+		top := (*stack)[len(*stack)-1]
+		switch m[1] {
+		case "else":
+			if top != "alt" && top != "opt" {
+				return fmt.Errorf("sequence diagram line %d: \"else\" is only valid inside an alt block (open block is %q)", lineno, top)
+			}
+		case "and":
+			if top != "par" {
+				return fmt.Errorf("sequence diagram line %d: \"and\" is only valid inside a par block (open block is %q)", lineno, top)
+			}
+		case "option":
+			if top != "critical" {
+				return fmt.Errorf("sequence diagram line %d: \"option\" is only valid inside a critical block (open block is %q)", lineno, top)
+			}
+		}
+		return validateFreeText(m[2], lineno, true)
+	}
+	if m := blockStartRe.FindStringSubmatch(line); m != nil {
+		keyword, label := m[1], strings.TrimSpace(m[2])
+		switch keyword {
+		case "loop", "alt", "opt":
+			if label == "" {
+				return fmt.Errorf("sequence diagram line %d: %q requires a label (for example \"%s Describe the case\")", lineno, keyword, keyword)
+			}
+		case "rect", "box":
+			if label == "" {
+				return fmt.Errorf("sequence diagram line %d: %q requires a color or name (for example \"%s LightBlue\")", lineno, keyword, keyword)
+			}
+		}
+		if err := validateFreeText(label, lineno, keyword == "par" || keyword == "critical" || keyword == "break" || label == ""); err != nil {
+			return err
+		}
+		if strings.Contains(label, ":") {
+			return fmt.Errorf("sequence diagram line %d: %q labels must not contain a colon", lineno, keyword)
+		}
+		*stack = append(*stack, keyword)
+		return nil
+	}
+	if m := participantRe.FindStringSubmatch(line); m != nil {
+		return validateParticipantLabel(m[3], lineno)
+	}
+	if strings.HasPrefix(line, "participant ") || strings.HasPrefix(line, "actor ") {
+		return fmt.Errorf("sequence diagram line %d: use \"participant ID\" or \"participant ID as Display Name\" with ID starting with a letter (letters, digits, _ and - only)", lineno)
+	}
+	if m := createRe.FindStringSubmatch(line); m != nil {
+		return validateParticipantLabel(m[3], lineno)
+	}
+	if strings.HasPrefix(line, "create ") {
+		return fmt.Errorf("sequence diagram line %d: use \"create participant ID\" with an ID starting with a letter", lineno)
+	}
+	if destroyRe.MatchString(line) || activateRe.MatchString(line) {
+		return nil
+	}
+	if strings.HasPrefix(line, "destroy ") || strings.HasPrefix(line, "activate ") || strings.HasPrefix(line, "deactivate ") {
+		return fmt.Errorf("sequence diagram line %d: use \"%s ID\" with an ID starting with a letter (letters, digits, _ and - only)", lineno, strings.Fields(line)[0])
+	}
+	if m := noteRe.FindStringSubmatch(line); m != nil {
+		ids := strings.Split(m[2], ",")
+		for _, id := range ids {
+			id = strings.TrimSpace(id)
+			if !participantIDRe.MatchString(id) {
+				return fmt.Errorf("sequence diagram line %d: note participants must be IDs starting with a letter (got %q); use \"Note over A,B: text\"", lineno, trimForError(id))
+			}
+		}
+		if m[1] != "over" && len(ids) != 1 {
+			return fmt.Errorf("sequence diagram line %d: \"Note %s\" takes exactly one participant; use \"Note over A,B: text\" for several", lineno, m[1]+" of")
+		}
+		return validateMessageText(m[3], lineno)
+	}
+	if strings.HasPrefix(line, "Note ") || line == "Note" {
+		return fmt.Errorf("sequence diagram line %d: use \"Note left of A: text\", \"Note right of A: text\" or \"Note over A[,B]: text\"", lineno)
+	}
+	if strings.HasPrefix(line, "note ") {
+		return fmt.Errorf("sequence diagram line %d: the Note keyword is capitalized (\"Note left of A: text\")", lineno)
+	}
+	if m := titleRe.FindStringSubmatch(line); m != nil {
+		return validateMessageText(m[1], lineno)
+	}
+	if m := sequenceMessageRe.FindStringSubmatch(line); m != nil {
+		return validateMessageText(m[5], lineno, messages)
+	}
+	if strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
+		return fmt.Errorf("sequence diagram line %d: messages need \"Sender->>Receiver: text\" with IDs starting with a letter and an arrow of ->, -->, ->>, -->>, -x, --x, -) or --)", lineno)
+	}
+	if !strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
+		return fmt.Errorf("sequence diagram line %d: messages need a colon (\"A->>B: text\"); got %q", lineno, trimForError(line))
+	}
+	return fmt.Errorf("sequence diagram line %d: unsupported statement %q; use participant/actor, messages (A->>B: text), Note, loop/alt/opt/par/critical/break/rect/box with end, or autonumber", lineno, trimForError(line))
+}
+
+func validateParticipantLabel(label string, lineno int) error {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return nil
+	}
+	if len(label) > maxParticipantLabelBytes {
+		return fmt.Errorf("sequence diagram line %d: participant label exceeds %d bytes", lineno, maxParticipantLabelBytes)
+	}
+	if strings.Contains(label, "`") || strings.Contains(label, "<") || strings.Contains(label, ">") {
+		return fmt.Errorf("sequence diagram line %d: participant labels must not contain backticks or angle brackets", lineno)
+	}
+	if strings.Contains(label, ":") || strings.Contains(label, ";") {
+		return fmt.Errorf("sequence diagram line %d: participant labels must not contain : or ;", lineno)
+	}
+	return nil
+}
+
+func validateMessageText(text string, lineno int, counter ...*int) error {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return fmt.Errorf("sequence diagram line %d: message text after the colon must not be empty", lineno)
+	}
+	if len(trimmed) > maxSequenceMessageBytes {
+		return fmt.Errorf("sequence diagram line %d: message text exceeds %d bytes; keep it to one short phrase", lineno, maxSequenceMessageBytes)
+	}
+	if strings.Contains(trimmed, "`") || strings.Contains(trimmed, "<") || strings.Contains(trimmed, ">") {
+		return fmt.Errorf("sequence diagram line %d: message text must not contain backticks or angle brackets; rephrase without HTML", lineno)
+	}
+	if len(counter) > 0 && counter[0] != nil {
+		*counter[0]++
+	}
+	return nil
+}
+
+func validateFreeText(text string, lineno int, allowEmpty bool) error {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		if allowEmpty {
+			return nil
+		}
+		return fmt.Errorf("sequence diagram line %d: block label must not be empty", lineno)
+	}
+	if len(trimmed) > maxSequenceLabelBytes {
+		return fmt.Errorf("sequence diagram line %d: block label exceeds %d bytes", lineno, maxSequenceLabelBytes)
+	}
+	if strings.Contains(trimmed, "`") || strings.Contains(trimmed, "<") || strings.Contains(trimmed, ">") {
+		return fmt.Errorf("sequence diagram line %d: block labels must not contain backticks or angle brackets", lineno)
+	}
+	return nil
+}
+
+func trimForError(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 60 {
+		return s[:57] + "..."
+	}
+	if s == "" {
+		return "(empty)"
+	}
+	return s
+}

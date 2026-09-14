@@ -160,9 +160,17 @@ side, priority, confidence, title, body, evidence; then run:
 
 An empty findings array is valid. important_files is an itemized list of the most
 important changed files (up to 30). Use plain Mermaid sequenceDiagram source,
-without fences, HTML, init directives or external links. Show the relevant changed
-interaction, not a generic review workflow. For docs/config-only changes, show
-the actual reader/operator/config-consumer interaction; don't invent runtime code.
+without fences, HTML, init directives or external links. The first line must be
+exactly `sequenceDiagram`, followed by one statement per line: `participant ID`
+or `participant ID as Display Name`, messages as `Sender->>Receiver: short text`
+(also --> -->> -x --x -) --)), `Note left of A: text` / `Note over A,B: text`,
+and `loop`/`alt`/`opt`/`par`/`critical`/`break`/`rect`/`box` blocks closed with
+`end`. IDs start with a letter and use only letters, digits, `_` and `-`; use
+`as` for display names with spaces. Every message needs a colon and non-empty
+text without backticks or angle brackets. Include at least one message. Show the
+relevant changed interaction, not a generic review workflow. For docs/config-only
+changes, show the actual reader/operator/config-consumer interaction; don't
+invent runtime code.
 Summary is one short paragraph of purpose plus at most four one-line key issues,
 not a file-by-file changelog. Key issues are derived from validated findings; do
 not duplicate the finding bodies.

@@ -46,3 +46,28 @@ func TestAgentSubmissionValidatesMetadataAndDiff(t *testing.T) {
 		t.Fatal("out-of-diff finding accepted")
 	}
 }
+
+func TestAgentOverviewRejectsBrokenMermaid(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("REVIEWD_OUTPUT", dir)
+	t.Setenv("REVIEWD_INPUT", "")
+	if err := agent([]string{"init"}); err != nil {
+		t.Fatal(err)
+	}
+	n := 4
+	overview := filepath.Join(dir, "overview.json")
+	r := report.Report{Summary: "Change behavior", Confidence: &n, Reasons: []string{"All good"}, ImportantFiles: []report.File{{Path: "a.go", Description: "Changes behavior"}}, SequenceDiagram: "sequenceDiagram\n A->>B Missing colon"}
+	if err := store.WriteJSON(overview, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent([]string{"overview", "--file", overview}); err == nil {
+		t.Fatal("overview with broken mermaid accepted")
+	}
+	r.SequenceDiagram = "sequenceDiagram\n A->>B: Call"
+	if err := store.WriteJSON(overview, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent([]string{"overview", "--file", overview}); err != nil {
+		t.Fatal(err)
+	}
+}

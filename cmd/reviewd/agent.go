@@ -103,6 +103,9 @@ func agent(args []string) error {
 		if len(overview.Findings) > 0 {
 			return errors.New("overview may not contain findings; use submit --file for a whole report")
 		}
+		if err := report.ValidateSequenceDiagram(overview.SequenceDiagram); err != nil {
+			return err
+		}
 		overview.Findings = r.Findings
 		return store.WriteJSON(draft, overview)
 	case "show":
