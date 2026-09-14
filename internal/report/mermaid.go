@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	sequenceMessageRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*)\s*(-->>|->>|--\)|-\)|--x|-x|-->|->)\s*([+-])?\s*([A-Za-z][A-Za-z0-9_-]*)\s*:(.*)$`)
+	sequenceMessageRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*?)\s*(-->>|->>|--\)|-\)|--x|-x|-->|->)\s*([+-])?\s*([A-Za-z][A-Za-z0-9_-]*)\s*:(.*)$`)
 	participantRe     = regexp.MustCompile(`^(participant|actor)\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s+as\s+(.+))?$`)
 	createRe          = regexp.MustCompile(`^create\s+(participant|actor)\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s+as\s+(.+))?$`)
 	destroyRe         = regexp.MustCompile(`^destroy\s+([A-Za-z][A-Za-z0-9_-]*)$`)
@@ -26,6 +26,36 @@ var (
 	titleRe           = regexp.MustCompile(`^title\s*:\s*(.+)$`)
 	participantIDRe   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 )
+
+// sequenceLifecycle mirrors Mermaid's sequenceDb rules for create, destroy,
+// and activation pairing: a create needs its next message to target the new
+// participant, a destroy needs its next message to involve the destroyed
+// participant, and a deactivation needs a prior activation. Like Mermaid,
+// trailing directives with no later message are left alone.
+type sequenceLifecycle struct {
+	pendingCreate  string
+	pendingDestroy string
+	hasCreate      bool
+	hasDestroy     bool
+	activations    map[string]int
+}
+
+func (l *sequenceLifecycle) consumeMessage(from, to string, lineno int) error {
+	if l.hasCreate {
+		if to != l.pendingCreate {
+			return fmt.Errorf("sequence diagram line %d: \"create participant %s\" needs a message to %s next; got a message to %q", lineno, l.pendingCreate, l.pendingCreate, trimForError(to))
+		}
+		l.pendingCreate, l.hasCreate = "", false
+		return nil
+	}
+	if l.hasDestroy {
+		if to != l.pendingDestroy && from != l.pendingDestroy {
+			return fmt.Errorf("sequence diagram line %d: \"destroy %s\" needs a message to or from %s next; got %q", lineno, l.pendingDestroy, l.pendingDestroy, trimForError(from+"->"+to))
+		}
+		l.pendingDestroy, l.hasDestroy = "", false
+	}
+	return nil
+}
 
 // ValidateSequenceDiagram enforces the strict sequenceDiagram subset that
 // reviewd publishes inside a fenced mermaid block. It rejects wrong diagram
@@ -64,6 +94,7 @@ func ValidateSequenceDiagram(src string) error {
 	}
 	var stack []string
 	messages := 0
+	life := &sequenceLifecycle{activations: map[string]int{}}
 	for i := first + 1; i < len(lines); i++ {
 		lineno := i + 1
 		raw := lines[i]
@@ -80,7 +111,7 @@ func ValidateSequenceDiagram(src string) error {
 		if strings.Contains(line, "`") {
 			return fmt.Errorf("sequence diagram line %d: backticks are not allowed; rephrase without code spans", lineno)
 		}
-		if err := validateSequenceLine(line, lineno, &stack, &messages); err != nil {
+		if err := validateSequenceLine(line, lineno, &stack, &messages, life); err != nil {
 			return err
 		}
 	}
@@ -93,17 +124,14 @@ func ValidateSequenceDiagram(src string) error {
 	return nil
 }
 
-func validateSequenceLine(line string, lineno int, stack *[]string, messages *int) error {
+func validateSequenceLine(line string, lineno int, stack *[]string, messages *int, life *sequenceLifecycle) error {
 	if line == "sequenceDiagram" {
 		return fmt.Errorf("sequence diagram line %d: duplicate \"sequenceDiagram\" header; use one statement per line", lineno)
 	}
-	for _, other := range []string{"graph ", "graph\n", "flowchart", "classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "mindmap", "timeline", "journey", "gitGraph", "C4Context"} {
-		if line == other || strings.HasPrefix(line, other+" ") || strings.HasPrefix(line, other+"\t") || line == strings.TrimSpace(other) {
+	for _, other := range []string{"graph", "flowchart", "classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "mindmap", "timeline", "journey", "gitGraph", "C4Context"} {
+		if line == other || strings.HasPrefix(line, other+" ") || strings.HasPrefix(line, other+"\t") {
 			return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
 		}
-	}
-	if strings.HasPrefix(line, "graph") || strings.HasPrefix(line, "flowchart") {
-		return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
 	}
 	if line == "autonumber" || line == "autonumber off" {
 		return nil
@@ -167,12 +195,28 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return fmt.Errorf("sequence diagram line %d: use \"participant ID\" or \"participant ID as Display Name\" with ID starting with a letter (letters, digits, _ and - only)", lineno)
 	}
 	if m := createRe.FindStringSubmatch(line); m != nil {
-		return validateParticipantLabel(m[3], lineno)
+		if err := validateParticipantLabel(m[3], lineno); err != nil {
+			return err
+		}
+		life.pendingCreate, life.hasCreate = m[2], true
+		return nil
 	}
 	if strings.HasPrefix(line, "create ") {
 		return fmt.Errorf("sequence diagram line %d: use \"create participant ID\" with an ID starting with a letter", lineno)
 	}
-	if destroyRe.MatchString(line) || activateRe.MatchString(line) {
+	if m := destroyRe.FindStringSubmatch(line); m != nil {
+		life.pendingDestroy, life.hasDestroy = m[1], true
+		return nil
+	}
+	if m := activateRe.FindStringSubmatch(line); m != nil {
+		if m[1] == "activate" {
+			life.activations[m[2]]++
+			return nil
+		}
+		if life.activations[m[2]] < 1 {
+			return fmt.Errorf("sequence diagram line %d: \"deactivate %s\" without a matching activation; activate %s first or drop the deactivation", lineno, m[2], m[2])
+		}
+		life.activations[m[2]]--
 		return nil
 	}
 	if strings.HasPrefix(line, "destroy ") || strings.HasPrefix(line, "activate ") || strings.HasPrefix(line, "deactivate ") {
@@ -201,7 +245,21 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return validateMessageText(m[1], lineno)
 	}
 	if m := sequenceMessageRe.FindStringSubmatch(line); m != nil {
-		return validateMessageText(m[5], lineno, messages)
+		if err := life.consumeMessage(m[1], m[4], lineno); err != nil {
+			return err
+		}
+		if err := validateMessageText(m[5], lineno, messages); err != nil {
+			return err
+		}
+		if m[3] == "+" {
+			life.activations[m[4]]++
+		} else if m[3] == "-" {
+			if life.activations[m[1]] < 1 {
+				return fmt.Errorf("sequence diagram line %d: \"-\" deactivates %s without a matching activation; activate %s first or drop the suffix", lineno, m[1], m[1])
+			}
+			life.activations[m[1]]--
+		}
+		return nil
 	}
 	if strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
 		return fmt.Errorf("sequence diagram line %d: messages need \"Sender->>Receiver: text\" with IDs starting with a letter and an arrow of ->, -->, ->>, -->>, -x, --x, -) or --)", lineno)

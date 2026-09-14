@@ -27,6 +27,27 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\n opt Optional\n A->>B: Maybe\n end",
 		"sequenceDiagram\n break When overloaded\n A->>B: Shed load\n end",
 		"sequenceDiagram\n A->>A: Self check",
+		"sequenceDiagram\n graphQL->>API: Query",
+		"sequenceDiagram\n A->>flowchartX: Hi",
+		"sequenceDiagram\n participant graphStore\n graphStore->>B: Save",
+		"sequenceDiagram\n graphQL->>API: Query\n Note over graphQL,API: Contract",
+		"sequenceDiagram\r\n A->>B: Hi",
+		"\n\nsequenceDiagram\n A->>B: Hi",
+		"sequenceDiagram\n my-id_2->>other_3: Dashed IDs",
+		"sequenceDiagram\n par\n A->>B: One\n end",
+		"sequenceDiagram\n critical\n A->>B: One\n end",
+		"sequenceDiagram\n break\n A->>B: One\n end",
+		"sequenceDiagram\n autonumber off\n A->>B: One",
+		"sequenceDiagram\n box Aqua\n participant A\n end\n A->>B: Hi",
+		"sequenceDiagram\n A->>B: Hi\n Note over A: Solo note",
+		"sequenceDiagram\n A->>T: Work\n destroy T\n T-->>A: Done",
+		"sequenceDiagram\n A->>T: Work\n destroy T\n A->>T: Bye",
+		"sequenceDiagram\n create participant A\n create participant B\n X->>B: Hi",
+		"sequenceDiagram\n create participant T\n Note over A: Pause\n A->>T: Init",
+		"sequenceDiagram\n activate B\n activate B\n A->>B: Hi\n deactivate B\n deactivate B",
+		"sequenceDiagram\n activate B\n B-->>-A: Done",
+		"sequenceDiagram\n A->>+B: Start\n deactivate B",
+		"sequenceDiagram\n A->>+A: Self\n A-->>-A: End",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
@@ -67,6 +88,37 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"duplicate header":     "sequenceDiagram\n A->>B: Hi\n sequenceDiagram",
 		"loop without label":   "sequenceDiagram\n loop\n A->>B: Hi\n end",
 		"nul byte":             "sequenceDiagram\n A->>B: Hi\x00",
+		"create to another":    "sequenceDiagram\n create participant T\n A->>Other: Hi",
+		"create from created":  "sequenceDiagram\n create participant T\n T->>A: Hi",
+		"destroy unrelated":    "sequenceDiagram\n A->>T: Work\n destroy T\n A->>B: Hi",
+		"deactivate alone":     "sequenceDiagram\n A->>B: Hi\n deactivate B",
+		"deactivate twice":     "sequenceDiagram\n activate B\n A->>B: Hi\n deactivate B\n deactivate B",
+		"minus w/o activation": "sequenceDiagram\n A->>B: Hi\n B-->>-A: Done",
+		"minus wrong party":    "sequenceDiagram\n A->>+B: Start\n A-->>-B: Done",
+		"bare graph":           "sequenceDiagram\n graph\n A->>B: Hi",
+		"bare flowchart":       "sequenceDiagram\n flowchart\n A->>B: Hi",
+		"graph tab":            "sequenceDiagram\n graph\tTD\n A->>B: Hi",
+		"class diagram":        "sequenceDiagram\n classDiagram\n A->>B: Hi",
+		"gantt":                "sequenceDiagram\n gantt\n A->>B: Hi",
+		"rect without label":   "sequenceDiagram\n rect\n A->>B: Hi\n end",
+		"box without label":    "sequenceDiagram\n box\n A->>B: Hi\n end",
+		"alt without label":    "sequenceDiagram\n alt\n A->>B: Hi\n end",
+		"label colon":          "sequenceDiagram\n participant A as A:B\n A->>B: Hi",
+		"label semicolon":      "sequenceDiagram\n participant A as A;B\n A->>B: Hi",
+		"label html":           "sequenceDiagram\n participant A as <A>\n A->>B: Hi",
+		"block label colon":    "sequenceDiagram\n loop A:B\n A->>B: Hi\n end",
+		"block label html":     "sequenceDiagram\n loop <A>\n A->>B: Hi\n end",
+		"note two left":        "sequenceDiagram\n Note left of A,B: Hi\n A->>B: Hi",
+		"note bad id":          "sequenceDiagram\n Note over 9A: Hi\n A->>B: Hi",
+		"note html":            "sequenceDiagram\n Note over A: <b>Hi</b>\n A->>B: Hi",
+		"title empty":          "sequenceDiagram\n title:\n A->>B: Hi",
+		"title html":           "sequenceDiagram\n title: <Hi>\n A->>B: Hi",
+		"capital participant":  "sequenceDiagram\n Participant A\n A->>B: Hi",
+		"create bare":          "sequenceDiagram\n create B\n A->>B: Hi",
+		"destroy bare":         "sequenceDiagram\n A->>B: Hi\n destroy",
+		"activate bare":        "sequenceDiagram\n A->>B: Hi\n activate",
+		"long block line":      "sequenceDiagram\n loop " + strings.Repeat("L", 495) + "\n A->>B: Hi",
+		"oversized label":      "sequenceDiagram\n participant A as " + strings.Repeat("z", 65) + "\n A->>B: Hi",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {
@@ -98,5 +150,99 @@ func TestReportValidateEnforcesSequenceDiagram(t *testing.T) {
 	r.SequenceDiagram = "sequenceDiagram\n participant A\n participant B"
 	if err := r.Validate(); err == nil {
 		t.Fatal("report without messages accepted")
+	}
+}
+
+func TestValidateSequenceDiagramDiagramTypeBoundary(t *testing.T) {
+	accept := []string{
+		"sequenceDiagram\n graphQL->>API: Query",
+		"sequenceDiagram\n A->>graphQL: Query",
+		"sequenceDiagram\n flowchart9->>B: Hi",
+		"sequenceDiagram\n flowchart->>B: Hi",
+		"sequenceDiagram\n participant graph\n graph->>B: Hi",
+		"sequenceDiagram\n participant ganttMaster\n ganttMaster->>B: Hi",
+	}
+	for _, src := range accept {
+		if err := ValidateSequenceDiagram(src); err != nil {
+			t.Errorf("ID with diagram-type prefix rejected: %v\n%s", err, src)
+		}
+	}
+	reject := map[string]string{
+		"graph":            "only sequenceDiagram is allowed",
+		"graph TD":         "only sequenceDiagram is allowed",
+		"graph\tLR":        "only sequenceDiagram is allowed",
+		"flowchart":        "only sequenceDiagram is allowed",
+		"flowchart TD":     "only sequenceDiagram is allowed",
+		"classDiagram":     "only sequenceDiagram is allowed",
+		"classDiagram Foo": "only sequenceDiagram is allowed",
+		"gantt":            "only sequenceDiagram is allowed",
+		"pie":              "only sequenceDiagram is allowed",
+		"graphQL":          "unsupported statement",
+		"flowchartX":       "unsupported statement",
+	}
+	for line, want := range reject {
+		err := ValidateSequenceDiagram("sequenceDiagram\n " + line + "\n A->>B: Hi")
+		if err == nil {
+			t.Errorf("%q accepted", line)
+			continue
+		}
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: error %q lacks %q", line, err.Error(), want)
+		}
+	}
+}
+
+func TestValidateSequenceDiagramLifecyclePairing(t *testing.T) {
+	valid := []string{
+		"sequenceDiagram\n create participant B\n A-->B: Hello",
+		"sequenceDiagram\n create actor B as Bob\n A->>B: Hello",
+		"sequenceDiagram\n A->>B: Work\n destroy B\n B-->>A: Done",
+		"sequenceDiagram\n A->>B: Work\n destroy B\n A->>B: Bye",
+		"sequenceDiagram\n A->>B: Hi\n destroy B",
+		"sequenceDiagram\n A->>B: Work\n activate B\n activate B\n deactivate B\n deactivate B",
+		"sequenceDiagram\n A->>+B: s\n B->>+C: t\n C-->>-B: u\n B-->>-A: v",
+	}
+	for _, src := range valid {
+		if err := ValidateSequenceDiagram(src); err != nil {
+			t.Errorf("paired lifecycle rejected: %v\n%s", err, src)
+		}
+	}
+	invalid := map[string]string{
+		"sequenceDiagram\n create participant T\n A->>Other: Hi":                     "needs a message to T next",
+		"sequenceDiagram\n create participant T\n T->>A: Hi":                         "needs a message to T next",
+		"sequenceDiagram\n create participant T\n Note over A: x\n A->>Other: Hi":    "needs a message to T next",
+		"sequenceDiagram\n A->>T: W\n destroy T\n A->>B: Hi":                         "needs a message to or from T next",
+		"sequenceDiagram\n create participant A\n destroy B\n X->>A: Hi\n Y->>Z: Yo": "needs a message to or from B next",
+		"sequenceDiagram\n create participant A\n destroy B\n X->>B: Hi":             "needs a message to A next",
+		"sequenceDiagram\n A->>B: Hi\n deactivate B":                                 "without a matching activation",
+		"sequenceDiagram\n A->>B: Hi\n B-->>-A: Done":                                "without a matching activation",
+	}
+	for src, want := range invalid {
+		err := ValidateSequenceDiagram(src)
+		if err == nil {
+			t.Errorf("unpaired lifecycle accepted:\n%s", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q\n%s", err.Error(), want, src)
+		}
+	}
+}
+
+func TestValidateSequenceDiagramActivationShorthandTargets(t *testing.T) {
+	if err := ValidateSequenceDiagram("sequenceDiagram\n A->>+B: S\n deactivate B"); err != nil {
+		t.Errorf("+ should activate the receiver: %v", err)
+	}
+	if err := ValidateSequenceDiagram("sequenceDiagram\n activate A\n A-->>-B: D"); err != nil {
+		t.Errorf("- should deactivate the sender: %v", err)
+	}
+	if err := ValidateSequenceDiagram("sequenceDiagram\n A->>+B: S\n A-->>-B: D"); err == nil {
+		t.Error("- deactivating a never-activated sender accepted")
+	}
+}
+
+func TestValidateSequenceDiagramDoubleDashArrowKeepsSenderID(t *testing.T) {
+	if err := ValidateSequenceDiagram("sequenceDiagram\n A->>+B: Start\n B-->>-A: Done"); err != nil {
+		t.Errorf("B-->>-A must parse the sender as B: %v", err)
 	}
 }
