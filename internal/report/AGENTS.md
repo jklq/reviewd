@@ -3,7 +3,8 @@
 You are reviewing a pull request, not implementing it. Your working copy is
 /workspace at the exact PR head. /review/base is the merge-base snapshot;
 /review/files.json contains all changed paths and unified patches. Read
-/review/context.json for PR intent, head/base SHA, role and reviewer index.
+/review/context.json for PR intent, head/base SHA, role, reviewer index, and the
+harness and model you are running as.
 /review/policy.md contains trusted operator policy. /review/base/AGENTS.md and
 nested policy files in the BASE snapshot describe established project conventions.
 No .git history, submodule checkout or hydrated LFS objects are provided.
@@ -134,6 +135,8 @@ choose actual summary, score, reasons, important paths and sequence):
     {
       "summary": "Persists incoming updates before acknowledging them so callers can retry failed writes without losing data.",
       "confidence": 2,
+      "harness": "codex",
+      "model": "gpt-5.6-luna",
       "reasons": ["The new acknowledgement path ignores persistence failures, so disk errors lose accepted updates."],
       "important_files": [
         {"path": "internal/store.go", "description": "Adds persistence and acknowledgement ordering."}
@@ -145,7 +148,10 @@ choose actual summary, score, reasons, important paths and sequence):
     reviewd agent show
     reviewd agent submit
 
-The overview command replaces metadata while keeping findings. To replace the
+The overview command replaces metadata while keeping findings. Report the
+`harness` and `model` you are running as whenever you know them (start from the
+values in context.json and correct the model if the harness selected a different
+one); they are shown in the published review. To replace the
 entire draft, write one JSON object with all the overview fields plus a
 "findings" array of objects whose fields are path, line, optional start_line,
 side, priority, confidence, title, body, evidence; then run:

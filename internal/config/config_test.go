@@ -98,7 +98,7 @@ func TestCredentialConfiguration(t *testing.T) {
 	}
 }
 func TestConfigRejectsUnsafeSettings(t *testing.T) {
-	for _, mutate := range []func(*Config){func(c *Config) { c.Parallelism = 0 }, func(c *Config) { c.Validator = "missing" }, func(c *Config) { h := c.Harnesses["codex"]; h.Env = []string{"GITHUB_TOKEN"}; c.Harnesses["codex"] = h }, func(c *Config) { h := c.Harnesses["codex"]; h.Network = "host"; c.Harnesses["codex"] = h }, func(c *Config) { h := c.Harnesses["codex"]; h.Command = []string{"codex"}; c.Harnesses["codex"] = h }} {
+	for _, mutate := range []func(*Config){func(c *Config) { c.Parallelism = 0 }, func(c *Config) { c.Validator = "missing" }, func(c *Config) { h := c.Harnesses["codex"]; h.Env = []string{"GITHUB_TOKEN"}; c.Harnesses["codex"] = h }, func(c *Config) { h := c.Harnesses["codex"]; h.Network = "host"; c.Harnesses["codex"] = h }, func(c *Config) { h := c.Harnesses["codex"]; h.Command = []string{"codex"}; c.Harnesses["codex"] = h }, func(c *Config) { h := c.Harnesses["codex"]; h.Model = "bad\nmodel"; c.Harnesses["codex"] = h }} {
 		c := Default()
 		mutate(&c)
 		if c.Validate() == nil {

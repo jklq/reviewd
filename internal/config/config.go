@@ -21,7 +21,8 @@ import (
 type Harness struct {
 	Image       string   `json:"image"`
 	Command     []string `json:"command"`
-	Env         []string `json:"env,omitempty"` // Names explicitly forwarded from the operator environment.
+	Model       string   `json:"model,omitempty"` // Declared model, recorded in reviews when the agent does not report one.
+	Env         []string `json:"env,omitempty"`   // Names explicitly forwarded from the operator environment.
 	Network     string   `json:"network"`
 	Credentials []string `json:"credentials,omitempty"`
 }
@@ -175,6 +176,9 @@ func (c Config) Validate() error {
 		}
 		if !name.MatchString(n) || h.Image == "" || strings.HasPrefix(h.Image, "-") || len(h.Command) == 0 || h.Command[0] == "" {
 			return fmt.Errorf("invalid harness %q", n)
+		}
+		if len(h.Model) > 120 || strings.ContainsAny(h.Model, "\x00\r\n") {
+			return fmt.Errorf("%s: model must be a single line of at most 120 bytes", n)
 		}
 		if h.Network != "bridge" && h.Network != "none" && !strings.HasPrefix(h.Network, "reviewd-") {
 			return fmt.Errorf("%s: network must be bridge, none or reviewd-*", n)

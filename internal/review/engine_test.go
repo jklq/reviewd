@@ -60,6 +60,9 @@ func TestParallelReviewThenValidator(t *testing.T) {
 	if runner.max != 3 || runner.reviewers != 3 || runner.validators != 1 || *r.Confidence != 4 {
 		t.Fatalf("unexpected fanout: %+v", runner)
 	}
+	if r.Harness != c.Validator || r.Model != c.Harnesses[c.Validator].Model {
+		t.Fatalf("unattributed review: %+v", r)
+	}
 }
 func TestWorkerFailureCannotBecomeCleanReview(t *testing.T) {
 	c := config.Default()

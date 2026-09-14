@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -24,7 +23,7 @@ func TestAgentSubmissionValidatesMetadataAndDiff(t *testing.T) {
 		t.Fatal("empty report submitted")
 	}
 	n := 4
-	r := report.Report{Summary: "Change behavior", Confidence: &n, Reasons: []string{"Integration tests unavailable"}, ImportantFiles: []report.File{{Path: "a.go", Description: "Changes behavior"}}, SequenceDiagram: "sequenceDiagram\n A->>B: Call"}
+	r := report.Report{Summary: "Change behavior", Confidence: &n, Reasons: []string{"Integration tests unavailable"}, ImportantFiles: []report.File{{Path: "a.go", Description: "Changes behavior"}}, SequenceDiagram: "sequenceDiagram\n A->>B: Call", Harness: "codex", Model: "gpt-5.6-luna"}
 	file := filepath.Join(dir, "full.json")
 	if err := store.WriteJSON(file, r); err != nil {
 		t.Fatal(err)
@@ -32,8 +31,12 @@ func TestAgentSubmissionValidatesMetadataAndDiff(t *testing.T) {
 	if err := agent([]string{"submit", "--file", file}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "report.json")); err != nil {
+	var persisted report.Report
+	if err := readJSON(filepath.Join(dir, "report.json"), &persisted); err != nil {
 		t.Fatal(err)
+	}
+	if persisted.Harness != "codex" || persisted.Model != "gpt-5.6-luna" {
+		t.Fatalf("model and harness not persisted: %+v", persisted)
 	}
 	r.Findings = []report.Finding{{Path: "a.go", Line: 88, Side: "RIGHT", Priority: 3, Confidence: .9, Title: "Fix it", Body: "Actual behavior", Evidence: "Concrete trigger"}}
 	if err := store.WriteJSON(file, r); err != nil {

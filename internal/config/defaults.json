@@ -10,10 +10,11 @@
       "command": [
         "sh",
         "-c",
-        "umask 077; mkdir -p \"$HOME/.codex\" && printf '%s' \"$CODEX_AUTH_JSON\" > \"$HOME/.codex/auth.json\" && unset CODEX_AUTH_JSON && exec codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox \"$1\"",
+        "umask 077; mkdir -p \"$HOME/.codex\" && printf '%s' \"$CODEX_AUTH_JSON\" > \"$HOME/.codex/auth.json\" && unset CODEX_AUTH_JSON && exec codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --model gpt-5.6-luna -c 'model_reasoning_effort=\"max\"' \"$1\"",
         "reviewd-codex",
         "{{.Prompt}}"
       ],
+      "model": "gpt-5.6-luna",
       "network": "bridge",
       "credentials": [
         "codex_account"
