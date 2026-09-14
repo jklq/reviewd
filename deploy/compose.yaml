@@ -1,0 +1,15 @@
+services:
+  reviewd:
+    image: reviewd:local
+    user: "${REVIEWD_UID}:${REVIEWD_GID}"
+    group_add:
+      - "${DOCKER_GID}"
+    command: ["serve", "--config", "${REVIEWD_ROOT}/reviewd.json"]
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${REVIEWD_ROOT}:${REVIEWD_ROOT}
+    restart: unless-stopped
+    stop_grace_period: 60s

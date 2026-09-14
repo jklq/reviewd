@@ -1,0 +1,8 @@
+/bin/
+/reviewd.json
+/reviewd-data/
+/credentials/
+/.reviewd-output/
+*.pem
+.env
+/LOCAL.md

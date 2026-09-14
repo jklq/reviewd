@@ -1,0 +1,7 @@
+.git
+bin
+reviewd-data
+credentials
+reviewd.json
+*.pem
+.env

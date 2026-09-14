@@ -1,0 +1,57 @@
+{
+  "listen": "127.0.0.1:8080",
+  "data_dir": "./reviewd-data",
+  "app_id": 0,
+  "private_key_file": "./github-app.pem",
+  "webhook_secret_env": "REVIEWD_WEBHOOK_SECRET",
+  "harnesses": {
+    "codex": {
+      "image": "reviewd-codex:local",
+      "command": [
+        "sh",
+        "-c",
+        "umask 077; mkdir -p \"$HOME/.codex\" && printf '%s' \"$CODEX_AUTH_JSON\" > \"$HOME/.codex/auth.json\" && unset CODEX_AUTH_JSON && exec codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox \"$1\"",
+        "reviewd-codex",
+        "{{.Prompt}}"
+      ],
+      "network": "bridge",
+      "credentials": [
+        "codex_account"
+      ]
+    }
+  },
+  "reviewers": [
+    "codex"
+  ],
+  "parallelism": 1,
+  "validator": "codex",
+  "workers": 2,
+  "timeout": "20m",
+  "memory": "2g",
+  "cpus": "2",
+  "max_findings": 20,
+  "min_finding_confidence": 0.85,
+  "policy": "",
+  "allow_forks": false,
+  "credentials": {
+    "codex_account": {
+      "state_file": "./credentials/codex/auth.json",
+      "env": [
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "CODEX_CA_CERTIFICATE",
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "NO_PROXY"
+      ],
+      "exports": [
+        "CODEX_AUTH_JSON"
+      ],
+      "command": [
+        "python3",
+        "-c",
+        "import base64, datetime, json, os, pathlib, subprocess, time\nstate = pathlib.Path(os.environ[\"REVIEWD_CREDENTIAL_STATE\"])\nif state.name != \"auth.json\":\n    raise RuntimeError(\"Codex state_file must be named auth.json\")\ndef read_login():\n    auth = json.loads(state.read_text())\n    if auth.get(\"auth_mode\") != \"chatgpt\":\n        raise RuntimeError(\"A ChatGPT account login is required\")\n    return auth\ndef expiry(auth):\n    token = auth[\"tokens\"][\"access_token\"].split(\".\")[1]\n    return json.loads(base64.urlsafe_b64decode(token + \"=\" * (-len(token) % 4)))[\"exp\"]\nauth = read_login()\nif expiry(auth) <= time.time() + int(os.environ[\"REVIEWD_CREDENTIAL_MIN_VALIDITY\"]) + 60:\n    env = dict(os.environ, CODEX_HOME=str(state.parent))\n    proc = subprocess.Popen([\"codex\", \"-c\", 'cli_auth_credentials_store=\"file\"', \"-c\", 'forced_login_method=\"chatgpt\"', \"app-server\"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env)\n    def send(message):\n        proc.stdin.write(json.dumps(message) + \"\\n\")\n        proc.stdin.flush()\n    def response(identifier):\n        for line in proc.stdout:\n            message = json.loads(line)\n            if message.get(\"id\") == identifier:\n                if message.get(\"error\"):\n                    raise RuntimeError(\"Codex account refresh failed\")\n                return message[\"result\"]\n        raise RuntimeError(\"Codex ended before account refresh completed\")\n    try:\n        send({\"id\": 1, \"method\": \"initialize\", \"params\": {\"clientInfo\": {\"name\": \"reviewd\", \"version\": \"1\"}}})\n        response(1)\n        send({\"method\": \"initialized\", \"params\": {}})\n        send({\"id\": 2, \"method\": \"account/read\", \"params\": {\"refreshToken\": True}})\n        result = response(2)\n        if (result.get(\"account\") or {}).get(\"type\") != \"chatgpt\":\n            raise RuntimeError(\"Codex requires ChatGPT account login\")\n    finally:\n        proc.terminate()\n        try:\n            proc.wait(timeout=5)\n        except subprocess.TimeoutExpired:\n            proc.kill()\n            proc.wait()\n    auth = read_login()\nexpires = datetime.datetime.fromtimestamp(expiry(auth), datetime.timezone.utc).isoformat()\nauth[\"tokens\"][\"refresh_token\"] = \"\"\nauth[\"last_refresh\"] = datetime.datetime.now(datetime.timezone.utc).isoformat()\nprint(json.dumps({\"expires_at\": expires, \"env\": {\"CODEX_AUTH_JSON\": json.dumps(auth, separators=(\",\", \":\"))}}))\n"
+      ]
+    }
+  }
+}
