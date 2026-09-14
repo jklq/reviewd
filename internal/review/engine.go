@@ -22,6 +22,10 @@ type Context struct {
 	Body          string   `json:"body"`
 	Head          string   `json:"head"`
 	Base          string   `json:"merge_base"`
+	Additions     int      `json:"additions"`
+	Deletions     int      `json:"deletions"`
+	ChangedFiles  int      `json:"changed_files"`
+	SizeTier      string   `json:"size_tier,omitempty"`
 	Role          string   `json:"role"`
 	Index         int      `json:"index"`
 	Total         int      `json:"total"`
@@ -41,12 +45,26 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 		return report.Report{}, err
 	}
 	meta.MinConfidence = eng.Config.MinFindingConfidence
-	meta.Total = eng.Config.Parallelism
+	// Size tiers route on the PR's changed lines and file count. The file
+	// list corroborates the PR counts when the API omits them.
+	lines := meta.Additions + meta.Deletions
+	if lines <= 0 {
+		for _, f := range files {
+			lines += f.Additions + f.Deletions
+		}
+	}
+	changed := len(files)
+	if changed == 0 {
+		changed = meta.ChangedFiles
+	}
+	sel := eng.Config.Select(lines, changed)
+	meta.SizeTier = sel.Tier
+	meta.Total = sel.Parallelism
 	for _, p := range diff.Incomplete {
 		meta.Coverage = append(meta.Coverage, "GitHub omitted the patch for "+p)
 	}
-	candidates := make([]report.Report, eng.Config.Parallelism)
-	errs := make([]error, eng.Config.Parallelism)
+	candidates := make([]report.Report, sel.Parallelism)
+	errs := make([]error, sel.Parallelism)
 	var wg sync.WaitGroup
 	reviewCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -54,7 +72,7 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			name := eng.Config.Reviewers[i%len(eng.Config.Reviewers)]
+			name := sel.Reviewers[i%len(sel.Reviewers)]
 			candidates[i], errs[i] = eng.runOne(reviewCtx, dir, meta, files, "reviewer", i, name, nil)
 			if errs[i] != nil {
 				cancel()
@@ -76,11 +94,11 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 		return report.Report{}, err
 	}
 	var result report.Report
-	if eng.Config.Parallelism == 1 {
+	if sel.Parallelism == 1 {
 		result = candidates[0]
 	} else {
 		var err error
-		result, err = eng.runOne(ctx, dir, meta, files, "validator", 0, eng.Config.Validator, candidates)
+		result, err = eng.runOne(ctx, dir, meta, files, "validator", 0, sel.Validator, candidates)
 		if err != nil {
 			return result, fmt.Errorf("validator: %w", err)
 		}
@@ -128,7 +146,7 @@ func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []
 			return report.Report{}, err
 		}
 	}
-	prompt := fmt.Sprintf("Read /review/AGENTS.md and follow its full review protocol. You are %s %d of %d. Review /review/files.json against /workspace and /review/base. Read context and trusted policy in /review. Set the overview harness and model fields to the harness and model you are running as, from /review/context.json or your own configuration, and report the actual model if it differs. Work directly: do not spawn subagents or delegate to other agents. Keep the report terse: a one-paragraph summary, at most three one-sentence confidence reasons and short finding bodies. Submit your complete report with reviewd agent submit. Do not stop at a chat response.", role, index+1, eng.Config.Parallelism)
+	prompt := fmt.Sprintf("Read /review/AGENTS.md and follow its full review protocol. You are %s %d of %d. Review /review/files.json against /workspace and /review/base. Read context and trusted policy in /review. Set the overview harness and model fields to the harness and model you are running as, from /review/context.json or your own configuration, and report the actual model if it differs. Work directly: do not spawn subagents or delegate to other agents. Keep the report terse: a one-paragraph summary, at most three one-sentence confidence reasons and short finding bodies. Submit your complete report with reviewd agent submit. Do not stop at a chat response.", role, index+1, meta.Total)
 	if role == "validator" {
 		prompt += " Independently validate and semantically deduplicate /review/candidates.json; report only substantiated findings and reassess merge confidence."
 	}

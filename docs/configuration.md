@@ -15,6 +15,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `reviewers` | `["codex"]` | Round-robin harness selection |
 | `parallelism` | `1` | 1–16 concurrent reviewers per PR |
 | `validator` | `codex` | Final independent pass harness (unused when `parallelism` is 1) |
+| `size_tiers` | none | Optional PR-size routing to harness sets |
 | `workers` | `2` | 1–32 simultaneously active PR jobs |
 | `timeout` | `20m` | Whole job deadline, all stages (1s–2h) |
 | `memory` | `2g` | Per-container memory limit (integer `m` or `g`) |
@@ -29,6 +30,35 @@ Maximum **concurrent** reviewer containers = `workers × parallelism`. Validatio
 Harness `env` lists variable **names**, not values. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
 
 Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex harness pins `gpt-5.6-luna` and `model_reasoning_effort="max"` in its command so reviews are reproducible rather than following ambient defaults.
+
+## PR-size harness tiers
+
+`size_tiers` routes PRs of different sizes to different harnesses, so small
+fixes can use a fast reviewer while large changes get the full panel. Tiers
+are evaluated in order and the first match wins; a PR matching no tier falls
+back to the top-level `reviewers`, `validator` and `parallelism`. Size is the
+PR's changed lines (additions plus deletions) and its changed-file count. Each
+reviewer input records the selected tier as `size_tier` in its `context.json`.
+
+```json
+{
+  "reviewers": ["codex"],
+  "validator": "codex",
+  "size_tiers": [
+    {"name": "small", "max_lines": 50, "max_files": 5, "reviewers": ["fast"], "validator": "fast", "parallelism": 1},
+    {"name": "medium", "max_lines": 500, "reviewers": ["codex"]},
+    {"name": "large", "reviewers": ["codex", "thorough"], "parallelism": 2}
+  ]
+}
+```
+
+A tier matches when the PR is within both bounds; a zero or omitted bound is
+unlimited, so the last tier above is a catch-all. `validator` and `parallelism`
+default to the top-level values when omitted. Tier names are optional labels
+and must be unique. `config check` rejects unknown harnesses, out-of-range
+parallelism, and tiers an earlier tier already covers (list tiers smallest
+first). Referenced harnesses must exist in `harnesses`, so `doctor` checks
+their images like any other harness.
 
 ## Shared credential refresh
 

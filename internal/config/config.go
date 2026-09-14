@@ -37,6 +37,62 @@ type Credential struct {
 	Env       []string `json:"env,omitempty"`
 	Exports   []string `json:"exports"`
 }
+// SizeTier routes PRs within its bounds to its own harness set. Zero bounds
+// are unlimited; empty Validator and Parallelism inherit the top-level values.
+type SizeTier struct {
+	Name        string   `json:"name,omitempty"`
+	MaxLines    int      `json:"max_lines,omitempty"`
+	MaxFiles    int      `json:"max_files,omitempty"`
+	Reviewers   []string `json:"reviewers"`
+	Validator   string   `json:"validator,omitempty"`
+	Parallelism *int     `json:"parallelism,omitempty"`
+}
+
+func (t SizeTier) label(i int) string {
+	if t.Name != "" {
+		return t.Name
+	}
+	return fmt.Sprintf("tier-%d", i+1)
+}
+
+// Selection is the effective reviewer set for one PR: either the first
+// matching size tier or, when none matches, the top-level defaults.
+type Selection struct {
+	Tier        string
+	Reviewers   []string
+	Validator   string
+	Parallelism int
+}
+
+// Select returns the first size tier matching the PR's changed lines
+// (additions plus deletions) and changed-file count.
+func (c Config) Select(lines, files int) Selection {
+	if lines < 0 {
+		lines = 0
+	}
+	if files < 0 {
+		files = 0
+	}
+	for i, t := range c.SizeTiers {
+		if (t.MaxLines <= 0 || lines <= t.MaxLines) && (t.MaxFiles <= 0 || files <= t.MaxFiles) {
+			sel := Selection{Tier: t.label(i), Reviewers: t.Reviewers, Validator: t.Validator, Parallelism: c.Parallelism}
+			if sel.Validator == "" {
+				sel.Validator = c.Validator
+			}
+			if t.Parallelism != nil {
+				sel.Parallelism = *t.Parallelism
+			}
+			return sel
+		}
+	}
+	return Selection{Reviewers: c.Reviewers, Validator: c.Validator, Parallelism: c.Parallelism}
+}
+
+// covers reports whether bound a (0 = unlimited) admits every value bound b admits.
+func covers(a, b int) bool {
+	return a <= 0 || (b > 0 && a >= b)
+}
+
 type Config struct {
 	Listen               string                `json:"listen"`
 	AgentBinary          string                `json:"agent_binary,omitempty"`
@@ -49,6 +105,7 @@ type Config struct {
 	Reviewers            []string              `json:"reviewers"`
 	Parallelism          int                   `json:"parallelism"`
 	Validator            string                `json:"validator"`
+	SizeTiers            []SizeTier            `json:"size_tiers,omitempty"`
 	Workers              int                   `json:"workers"`
 	Timeout              string                `json:"timeout"`
 	Memory               string                `json:"memory"`
@@ -160,6 +217,44 @@ func (c Config) Validate() error {
 	for _, n := range append(append([]string{}, c.Reviewers...), c.Validator) {
 		if _, ok := c.Harnesses[n]; !ok {
 			return fmt.Errorf("unknown harness %q", n)
+		}
+	}
+	names := map[string]bool{}
+	for i, t := range c.SizeTiers {
+		if err := report.ValidateAttribution("size tier", t.Name); err != nil {
+			return err
+		}
+		if t.Name != "" {
+			if names[t.Name] {
+				return fmt.Errorf("duplicate size tier %q", t.Name)
+			}
+			names[t.Name] = true
+		}
+		if t.MaxLines < 0 || t.MaxFiles < 0 {
+			return fmt.Errorf("size tier %q: max_lines and max_files must be >= 0", t.label(i))
+		}
+		if len(t.Reviewers) == 0 {
+			return fmt.Errorf("size tier %q: at least one reviewer is required", t.label(i))
+		}
+		for _, n := range t.Reviewers {
+			if _, ok := c.Harnesses[n]; !ok {
+				return fmt.Errorf("size tier %q: unknown harness %q", t.label(i), n)
+			}
+		}
+		if t.Validator != "" {
+			if _, ok := c.Harnesses[t.Validator]; !ok {
+				return fmt.Errorf("size tier %q: unknown harness %q", t.label(i), t.Validator)
+			}
+		}
+		if t.Parallelism != nil && (*t.Parallelism < 1 || *t.Parallelism > 16) {
+			return fmt.Errorf("size tier %q: parallelism must be 1..16", t.label(i))
+		}
+	}
+	for j := range c.SizeTiers {
+		for i := 0; i < j; i++ {
+			if covers(c.SizeTiers[i].MaxLines, c.SizeTiers[j].MaxLines) && covers(c.SizeTiers[i].MaxFiles, c.SizeTiers[j].MaxFiles) {
+				return fmt.Errorf("size tier %q is unreachable: tier %q matches every PR it would match", c.SizeTiers[j].label(j), c.SizeTiers[i].label(i))
+			}
 		}
 	}
 	for n, h := range c.Harnesses {

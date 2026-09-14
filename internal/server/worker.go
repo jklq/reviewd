@@ -294,7 +294,7 @@ func (w Worker) produce(ctx context.Context, c *github.Client, j *store.Job, p g
 			return result, err
 		}
 	}
-	meta := review.Context{Repo: j.Repo, Number: j.Number, Title: p.Title, Body: p.Body, Head: p.Head.SHA, Base: mergeBase}
+	meta := review.Context{Repo: j.Repo, Number: j.Number, Title: p.Title, Body: p.Body, Head: p.Head.SHA, Base: mergeBase, Additions: p.Additions, Deletions: p.Deletions, ChangedFiles: len(files)}
 	if meta.Coverage, err = review.SnapshotCoverage(filepath.Join(dir, "head"), filepath.Join(dir, "base"), files); err != nil {
 		return result, err
 	}
