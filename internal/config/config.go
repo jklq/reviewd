@@ -182,6 +182,11 @@ func (c Config) Validate() error {
 		if err := report.ValidateAttribution("model", h.Model); err != nil {
 			return fmt.Errorf("%s: %w", n, err)
 		}
+		// The harness name is stamped into every review's attribution, so a
+		// name the report rejects must fail here rather than on every run.
+		if err := report.ValidateAttribution("harness", n); err != nil {
+			return fmt.Errorf("%s: %w", n, err)
+		}
 		if h.Network != "bridge" && h.Network != "none" && !strings.HasPrefix(h.Network, "reviewd-") {
 			return fmt.Errorf("%s: network must be bridge, none or reviewd-*", n)
 		}
