@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -172,5 +173,86 @@ func TestStrictDecode(t *testing.T) {
 		if Decode([]byte(s), &c) == nil {
 			t.Fatal(s)
 		}
+	}
+}
+
+func egressHarness() Config {
+	c := Default()
+	c.Egress = &Egress{Image: "reviewd-egress:local", Command: []string{"/usr/local/bin/egress", "serve", "--listen", ":8080"}, Network: "bridge", CAFile: "./egress-ca.pem"}
+	h := c.Harnesses["codex"]
+	h.Network = ""
+	h.Egress = true
+	c.Harnesses["codex"] = h
+	return c
+}
+
+func TestEgressValidation(t *testing.T) {
+	if err := egressHarness().Validate(); err != nil {
+		t.Fatalf("valid egress config rejected: %v", err)
+	}
+	cases := map[string]func(*Config){
+		"missing block": func(c *Config) { c.Egress = nil },
+		"empty image":   func(c *Config) { c.Egress.Image = "" },
+		"flag image":    func(c *Config) { c.Egress.Image = "-evil" },
+		"empty command": func(c *Config) { c.Egress.Command = nil },
+		"blank command": func(c *Config) { c.Egress.Command = []string{""} },
+		"bad network":   func(c *Config) { c.Egress.Network = "host" },
+		"empty network": func(c *Config) { c.Egress.Network = "" },
+		"empty ca":      func(c *Config) { c.Egress.CAFile = "" },
+		"network set": func(c *Config) {
+			h := c.Harnesses["codex"]
+			h.Network = "bridge"
+			c.Harnesses["codex"] = h
+		},
+	}
+	for name, mutate := range cases {
+		c := egressHarness()
+		mutate(&c)
+		if c.Validate() == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}
+
+func TestEgressPathsResolveAgainstConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reviewd.json")
+	c := egressHarness()
+	c.DataDir = "./reviewd-data"
+	b, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Egress.CAFile != filepath.Join(dir, "egress-ca.pem") {
+		t.Fatalf("ca_file not relative to config: %s", loaded.Egress.CAFile)
+	}
+	if !filepath.IsAbs(loaded.ConfigFile) || loaded.ConfigFile != path {
+		t.Fatalf("config file not recorded: %q", loaded.ConfigFile)
+	}
+	abs, err := filepath.Abs(filepath.Join(dir, "other.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Egress.CAFile = abs
+	b, err = json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Egress.CAFile != abs {
+		t.Fatalf("absolute ca_file rewritten: %s", loaded.Egress.CAFile)
 	}
 }

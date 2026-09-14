@@ -30,12 +30,16 @@ type workerRunner struct {
 	mu             sync.Mutex
 	calls          int
 	afterValidator func()
+	fail           error
 }
 
 func (r *workerRunner) Run(ctx context.Context, req sandbox.Request) (report.Report, error) {
 	r.mu.Lock()
 	r.calls++
 	r.mu.Unlock()
+	if r.fail != nil {
+		return report.Report{}, r.fail
+	}
 	if req.Role == "validator" && r.afterValidator != nil {
 		r.afterValidator()
 	}
@@ -48,6 +52,7 @@ type githubFixture struct {
 	head, base, body  string
 	reviews, comments int
 	reactions         []string
+	commentBodies     []string
 	published         map[string]any
 }
 
@@ -92,6 +97,9 @@ func (f *githubFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			fmt.Fprint(w, "[]")
 		} else {
+			var v map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&v)
+			f.commentBodies = append(f.commentBodies, v["body"])
 			f.comments++
 			fmt.Fprint(w, `{"id":11}`)
 		}
@@ -235,6 +243,31 @@ func TestCompletionSurvivesTemporaryStorageFailure(t *testing.T) {
 	}
 	if _, ok, err = w.Store.Claim(); err != nil || !ok {
 		t.Fatalf("PR remains blocked: %v", err)
+	}
+}
+
+func TestEgressLeakFailsWithoutPublish(t *testing.T) {
+	w, j, f, runner := setupWorker(t)
+	runner.fail = fmt.Errorf("reviewer 0: %w", sandbox.ErrEgressLeak)
+	j.Attempts = 3
+	w.process(context.Background(), j)
+	if j.Status != "failed" {
+		t.Fatalf("status=%s", j.Status)
+	}
+	if j.Error != sandbox.ErrEgressLeak.Error() {
+		t.Fatalf("persisted error leaks detail: %q", j.Error)
+	}
+	if f.reviews != 0 {
+		t.Fatal("leaked report published")
+	}
+	if f.comments != 1 || len(f.commentBodies) != 1 {
+		t.Fatalf("failure comment missing: %+v", f.commentBodies)
+	}
+	if !strings.Contains(f.commentBodies[0], "Review could not complete") || strings.Contains(f.commentBodies[0], "sentinel") {
+		t.Fatalf("failure comment exposes detail: %q", f.commentBodies[0])
+	}
+	if _, err := os.Stat(filepath.Join(w.Store.RunDir(j.ID), "report.json")); !os.IsNotExist(err) {
+		t.Fatal("report written despite leak")
 	}
 }
 
