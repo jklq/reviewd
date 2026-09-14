@@ -6,6 +6,9 @@ Self-hosted AI PR reviews with BYO harness. Runs (optionally multiple) reviewers
 containers, validates their findings, and posts a summary with inline comments
 and a 0–5 merge-confidence score. Configurable with Codex and most other CLI harnesses supporting headless mode.
 
+> [!CAUTION]
+> Currently, PR descriptions, diffs, fixtures, and candidate reports are untrusted input. A malicious PR can use prompt injection to make a harness disclose its own model-provider credential, which its container holds by design, or to place attacker-authored text in a review. 
+
 ## Install
 
 Requires Linux, Go 1.25+, Docker, and a GitHub App.
@@ -100,6 +103,7 @@ are operator-managed. Use a dedicated runner for untrusted code.
 Snapshots omit Git history, submodule contents, and hydrated LFS objects.
 Incomplete coverage lowers confidence. GitHub publication retries reconcile
 existing reviews, but an ambiguous API response can still cause a duplicate.
+
 
 ```sh
 make check        # race-enabled tests and go vet
