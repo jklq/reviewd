@@ -7,7 +7,7 @@ containers, validates their findings, and posts a summary with inline comments
 and a 0–5 merge-confidence score. Configurable with Codex and most other CLI harnesses supporting headless mode.
 
 > [!CAUTION]
-> Currently, PR descriptions, diffs, fixtures, and candidate reports are untrusted input. A malicious PR can use prompt injection to make a harness disclose its own model-provider credential, which its container holds by design, or to place attacker-authored text in a review. 
+> Currently, PR descriptions, diffs, fixtures, and candidate reports are untrusted input. A malicious PR can use prompt injection to make a harness disclose its own model-provider credential, which its container holds by design, or to place attacker-authored text in a review. The opt-in [egress proxy](docs/configuration.md#egress-proxy-and-credential-isolation) removes credentials from harness containers so injected prompts only ever see single-use sentinels.
 
 ## Install
 
@@ -16,6 +16,7 @@ Requires Linux, Go 1.25+, Docker, and a GitHub App.
 ```sh
 make build
 make codex-image
+make egress-image  # only when a harness sets "egress": true
 ./bin/reviewd init --app-id YOUR_APP_ID --parallelism 1
 ```
 
@@ -92,6 +93,12 @@ harnesses can pass credential names through `env`, or select shared refresh
 definitions through `credentials`. Adding a harness requires only configuration
 and its image. See the [configuration reference](docs/configuration.md) and
 [agent reporting protocol](internal/report/AGENTS.md).
+
+For credential isolation, set `egress: true` on a harness and configure the
+global `egress` proxy block: the harness then receives per-run sentinels while
+a per-job proxy swaps them for real credentials on the network path. See the
+[egress configuration](docs/configuration.md#egress-proxy-and-credential-isolation)
+and [egress deployment](docs/deployment.md#egress-proxy-deployment) guides.
 
 ## Operate
 
