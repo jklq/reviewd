@@ -27,7 +27,7 @@
   "parallelism": 1,
   "validator": "codex",
   "workers": 2,
-  "timeout": "20m",
+  "timeout": "45m",
   "memory": "2g",
   "cpus": "2",
   "max_findings": 20,
