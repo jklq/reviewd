@@ -143,6 +143,24 @@ Any sentinel found in the harness transcript or `harness.log` fails the job befo
 
 The proxy contract: reviewd starts the configured image with the real credential values in its environment, `REVIEWD_SENTINELS` holding the export→sentinel JSON map, the config file mounted read-only, and each referenced credential state directory mounted read-write at the same absolute paths. The shipped proxy serves HTTP CONNECT and forwarding on `:8080`, mints per-host TLS certificates from the CA, substitutes sentinel→real in request headers and bodies and real→sentinel in responses while streaming, allowlists destinations from `--allow`/`REVIEWD_EGRESS_ALLOW` (exact hosts, `*.example.com` for subdomains) with 403 plus a log line for anything else, and answers `GET /healthz` for its HEALTHCHECK. It never logs credential values, headers, or bodies. Provider-specific behavior belongs in the proxy image and operator configuration, never in reviewd itself: reviewd only plans the proxy argv, mounts, and environment. The proxy owns token refresh by re-running `reviewd credential env --config <mounted config> <name>` when a credential nears expiry, so the harness never needs a refresh token; refresh commands therefore run inside the proxy container and must find their interpreters and CLIs there (the shipped image carries `sh` and Python 3, not provider CLIs). See [deployment](deployment.md#egress-proxy-deployment) for CA generation, the network model, and verification.
 
+When the CLI reads its credential from a structured file such as a JSON auth file, export each secret leaf as its own credential export and rebuild the file in the harness command with the sentinels in the secret positions. A single export holding the whole file would hand the harness one opaque sentinel string that the CLI cannot parse. The refresh command below extracts one API key from an opencode login, and the harness command writes a minimal auth file around the sentinel; the CLI parses it normally, sends the sentinel, and the proxy swaps in the real key:
+
+```json
+"credentials": {
+  "opencode_go": {
+    "state_file": "/var/lib/reviewd/credentials/opencode/auth.json",
+    "exports": ["OPENCODE_KEY"],
+    "command": ["python3", "-c", "import json,os;print(json.dumps({'expires_at':'2035-01-01T00:00:00Z','env':{'OPENCODE_KEY':json.load(open(os.environ['REVIEWD_CREDENTIAL_STATE']))['opencode-go']['key']}}))"]
+  }
+}
+```
+
+```sh
+printf '{"opencode-go":{"type":"api","key":"%s"}}' "$OPENCODE_KEY" > "$HOME/.local/share/opencode/auth.json"
+```
+
+Opaque bearer values sent as-is (API keys, OAuth access tokens) isolate cleanly. Tokens the CLI cryptographically verifies client-side do not: the Codex CLI verifies its ChatGPT identity token signature locally, so ChatGPT-account Codex harnesses cannot use egress and should stay on direct networking or switch to API-key auth. See the harness notes in [deployment](deployment.md#egress-proxy-deployment).
+
 ## Review policy
 
 Example:

@@ -142,6 +142,12 @@ Verify after enabling `egress` on a harness:
 
 Rollback is configuration-only: set `egress: false` (or remove the flag and restore the harness `network`), restart the daemon, and harnesses return to direct provider access with real credentials in their environment. Non-egress harnesses are behaviorally unchanged while others use the proxy.
 
+Harness compatibility notes from manual verification:
+
+- opencode works fully behind the proxy: it honors `HTTPS_PROXY` and `SSL_CERT_FILE`, so point `SSL_CERT_FILE` at `$REVIEWD_EGRESS_CA` in the harness command. Allow `opencode.ai` and `*.opencode.ai`; the wildcard covers the model registry at `models.opencode.ai`, which a fresh harness home must fetch before the provider key is ever used. Export the provider key as its own credential and write a minimal auth file around the sentinel as shown in [configuration](configuration.md#egress-proxy-and-credential-isolation).
+- Codex with a ChatGPT account does not work behind the proxy: the CLI verifies its identity token signature locally, so the harness would need the real identity token and isolation fails. Use API-key auth for egressed Codex (`OPENAI_API_KEY` swaps opaquely with no client-side validation) or keep ChatGPT-account Codex on direct networking. Egressed Codex also falls back from its websocket transport to HTTPS under interception (about 8 seconds of retries per run) and needs `chatgpt.com`, `*.oaiusercontent.com`, and `api.openai.com` allowlisted; point `CODEX_CA_CERTIFICATE` at `$REVIEWD_EGRESS_CA`.
+- Claude Code works with API-key auth: export the key, point `NODE_EXTRA_CA_CERTS` at `$REVIEWD_EGRESS_CA`, and allow the configured API host. Uppercase `HTTPS_PROXY` is honored.
+
 ## Observe and recover
 
 Jobs have states: `queued`, `running`, `done`, `failed`, `superseded`. CLI needs same config path and identity:

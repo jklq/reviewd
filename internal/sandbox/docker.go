@@ -446,7 +446,10 @@ func planDockerRun(p planRequest) (planResult, error) {
 		if p.owner != "" {
 			proxy = append(proxy, "--label", "reviewd.owner="+p.owner)
 		}
-		proxy = append(proxy, "--user", p.uid+":"+p.gid, "--network", p.egress.Network, "--network-alias", "reviewd-egress")
+		proxy = append(proxy, "--user", p.uid+":"+p.gid, "--network", p.egress.Network)
+		if p.egress.Network != "bridge" && p.egress.Network != "none" {
+			proxy = append(proxy, "--network-alias", "reviewd-egress")
+		}
 		proxy = append(proxy, "--mount", "type=bind,src="+p.configFile+",dst="+p.configFile+",readonly")
 		proxy = append(proxy, "--mount", "type=bind,src="+p.egress.CAFile+",dst="+p.egress.CAFile+",readonly")
 		for _, dir := range p.stateDirs {
