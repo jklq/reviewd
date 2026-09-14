@@ -182,8 +182,17 @@ func (s *server) handleForward(conn net.Conn, br *bufio.Reader, req *http.Reques
 	}
 }
 
+func invertPairs(pairs []pair) []pair {
+	out := make([]pair, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, pair{old: p.new, new: p.old})
+	}
+	return out
+}
+
 func (s *server) roundTrip(upstream io.ReadWriter, reader *bufio.Reader, client io.Writer, req *http.Request) error {
 	pairs := s.creds.requestPairs()
+	respPairs := invertPairs(pairs)
 	substituteHeader(req.Header, pairs)
 	if req.Body != nil {
 		body, err := io.ReadAll(io.LimitReader(req.Body, maxRequestBody+1))
@@ -217,7 +226,7 @@ func (s *server) roundTrip(upstream io.ReadWriter, reader *bufio.Reader, client 
 			return err
 		}
 		if resp.StatusCode >= 100 && resp.StatusCode < 200 && resp.StatusCode != http.StatusSwitchingProtocols {
-			substituteHeader(resp.Header, s.creds.responsePairs())
+			substituteHeader(resp.Header, respPairs)
 			if err := resp.Write(client); err != nil {
 				_ = resp.Body.Close()
 				return err
@@ -225,13 +234,12 @@ func (s *server) roundTrip(upstream io.ReadWriter, reader *bufio.Reader, client 
 			_ = resp.Body.Close()
 			continue
 		}
-		return s.writeResponse(client, req, resp)
+		return s.writeResponse(client, req, resp, respPairs)
 	}
 }
 
-func (s *server) writeResponse(client io.Writer, req *http.Request, resp *http.Response) error {
+func (s *server) writeResponse(client io.Writer, req *http.Request, resp *http.Response, pairs []pair) error {
 	defer resp.Body.Close()
-	pairs := s.creds.responsePairs()
 	substituteHeader(resp.Header, pairs)
 	resp.Close = true
 	if resp.StatusCode == http.StatusSwitchingProtocols {

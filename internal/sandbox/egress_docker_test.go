@@ -199,6 +199,8 @@ case "$HARNESS_AUTH" in reviewd-sentinel-*) ;; *) echo "harness auth is not a se
 if [ "$HARNESS_AUTH" = 'test-access-egress' ]; then echo "harness holds real credential"; exit 11; fi
 test -s /review/egress-ca.pem
 test "$REVIEWD_EGRESS_CA" = /review/egress-ca.pem
+grep -q "BEGIN CERTIFICATE" /review/egress-ca.pem
+if grep -q "PRIVATE KEY" /review/egress-ca.pem; then echo "CA private key visible to harness"; exit 19; fi
 if env -u HTTPS_PROXY -u HTTP_PROXY -u NO_PROXY -u https_proxy -u http_proxy -u no_proxy curl -sS --max-time 5 http://upstream:8080/echo 2>/dev/null; then echo "upstream directly reachable"; exit 12; fi
 AUTH=$(curl -sS --max-time 15 --cacert "$REVIEWD_EGRESS_CA" -H "Authorization: Bearer $HARNESS_AUTH" https://upstream:8443/echo)
 case "$AUTH" in *"$HARNESS_AUTH"*) ;; *) echo "response not scrubbed"; exit 13;; esac

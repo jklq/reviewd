@@ -103,7 +103,7 @@ cat egress-ca-cert.pem egress-ca-key.pem > egress-ca.pem
 install -m 0600 -o reviewd -g reviewd egress-ca.pem /etc/reviewd/egress-ca.pem
 ```
 
-Protect this file like a credential: whoever holds the key can mint certificates your harnesses trust. Never reuse an organizational CA. Point `ca_file` at it and list provider hosts in the proxy `--allow` arguments. The same bundle is mounted read-only into the harness at `/review/egress-ca.pem` for TLS verification.
+Protect this file like a credential: whoever holds the key can mint certificates your harnesses trust. Never reuse an organizational CA. Point `ca_file` at it and list provider hosts in the proxy `--allow` arguments. The bundle itself stays proxy-only: each run derives a certificate-only file from it into the run input, where the harness reads it at `/review/egress-ca.pem` for TLS verification, so the private key never enters a harness container.
 
 Build the proxy image on the Docker host:
 
@@ -111,13 +111,15 @@ Build the proxy image on the Docker host:
 make egress-image
 ```
 
-To bake the CA into the shipped Codex harness image instead of trusting it at runtime, copy the bundle into the build context (`*.pem` is gitignored) and pass it as a build argument:
+To bake the CA into the shipped Codex harness image instead of trusting it at runtime, extract the certificate (never the private key) into the build context (`*.pem` is gitignored) and pass it as a build argument:
 
 ```sh
-cp /etc/reviewd/egress-ca.pem ./egress-ca.pem
-docker build --target codex --build-arg EGRESS_CA_FILE=./egress-ca.pem -t reviewd-codex:local .
-rm ./egress-ca.pem
+openssl x509 -in /etc/reviewd/egress-ca.pem -out ./egress-ca-cert.pem
+docker build --target codex --build-arg EGRESS_CA_FILE=./egress-ca-cert.pem -t reviewd-codex:local .
+rm ./egress-ca-cert.pem
 ```
+
+The build installs only certificate blocks into the trust store, but pass a certificate-only file anyway: a bundle copied into the build context would linger in an image layer.
 
 Without the argument the image builds unchanged. Custom harness images can use the runtime equivalent from the configuration reference.
 

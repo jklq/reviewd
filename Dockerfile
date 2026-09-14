@@ -19,7 +19,7 @@ ARG EGRESS_CA_FILE=deploy/egress-ca-stub
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git ripgrep && rm -rf /var/lib/apt/lists/* \
     && npm install -g @openai/codex@${CODEX_VERSION}
 COPY ${EGRESS_CA_FILE} /tmp/egress-ca.pem
-RUN if grep -q "BEGIN CERTIFICATE" /tmp/egress-ca.pem 2>/dev/null; then cp /tmp/egress-ca.pem /usr/local/share/ca-certificates/egress-ca.crt && update-ca-certificates; fi; rm -f /tmp/egress-ca.pem
+RUN if grep -q "BEGIN CERTIFICATE" /tmp/egress-ca.pem 2>/dev/null; then sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' /tmp/egress-ca.pem > /usr/local/share/ca-certificates/egress-ca.crt && update-ca-certificates; fi; rm -f /tmp/egress-ca.pem
 COPY --from=build /out/reviewd /usr/local/bin/reviewd
 ENV HOME=/home/reviewd
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt

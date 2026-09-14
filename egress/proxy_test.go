@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testSentinel = "reviewd-sentinel-test0000000000000000000000"
@@ -218,5 +219,97 @@ func TestSentinelLoading(t *testing.T) {
 	t.Setenv("HARNESS_AUTH", "")
 	if _, err := newCredentials(map[string]string{"HARNESS_AUTH": testSentinel}, "", "reviewd"); err == nil {
 		t.Fatal("missing real value accepted")
+	}
+}
+
+func TestRotationDuringRequest(t *testing.T) {
+	received := make(chan struct{})
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		close(received)
+		<-release
+		_, _ = fmt.Fprint(w, "secret "+testReal)
+	}))
+	defer upstream.Close()
+	host, _, _ := net.SplitHostPort(strings.TrimPrefix(upstream.URL, "http://"))
+	caPath, _ := testCA(t)
+	authority, err := loadCA(caPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds := &credentials{sentinels: map[string]string{"HARNESS_AUTH": testSentinel}, reals: map[string]string{"HARNESS_AUTH": testReal}, items: map[string]*credItem{}}
+	s := &server{allow: parseAllow([]string{host}, ""), creds: creds, ca: authority}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go s.serveListener(ln)
+	bodyCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		req, _ := http.NewRequest("GET", upstream.URL+"/echo", nil)
+		req.Header.Set("Authorization", "Bearer "+testSentinel)
+		resp, err := proxyClient(ln.Addr().String(), nil).Do(req)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		bodyCh <- string(body)
+	}()
+	<-received
+	creds.mu.Lock()
+	creds.reals["HARNESS_AUTH"] = "rotated-new-value"
+	creds.mu.Unlock()
+	close(release)
+	select {
+	case err := <-errCh:
+		t.Fatal(err)
+	case body := <-bodyCh:
+		if strings.Contains(body, testReal) {
+			t.Fatalf("old secret reached client: %q", body)
+		}
+		if !strings.Contains(body, testSentinel) {
+			t.Fatalf("response not scrubbed: %q", body)
+		}
+	}
+}
+
+func TestConnectionLimit(t *testing.T) {
+	caPath, _ := testCA(t)
+	proxyAddr := testServer(t, caPath, parseAllow([]string{"allowed.test"}, ""), map[string]string{}, map[string]string{})
+	const extra = 8
+	conns := make([]net.Conn, 0, maxProxyConns+extra)
+	for i := 0; i < maxProxyConns+extra; i++ {
+		conn, err := net.Dial("tcp", proxyAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conns = append(conns, conn)
+	}
+	defer func() {
+		for _, conn := range conns {
+			_ = conn.Close()
+		}
+	}()
+	closed := make(chan bool, len(conns))
+	for _, conn := range conns {
+		go func() {
+			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_, err := conn.Read(make([]byte, 1))
+			closed <- err == io.EOF
+		}()
+	}
+	n := 0
+	for range conns {
+		if <-closed {
+			n++
+		}
+	}
+	if n < extra {
+		t.Fatalf("only %d of %d excess connections closed", n, extra)
 	}
 }

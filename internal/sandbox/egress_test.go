@@ -79,10 +79,15 @@ func TestPlanEgressHarness(t *testing.T) {
 	if value, found := envValue(p.harnessArgv, "REVIEWD_EGRESS_CA"); !found || value != "/review/egress-ca.pem" {
 		t.Fatalf("bad REVIEWD_EGRESS_CA: %q", value)
 	}
-	if !slices.Contains(p.harnessArgv, "type=bind,src=/etc/reviewd/egress-ca.pem,dst=/review/egress-ca.pem,readonly") {
-		t.Fatal("missing harness CA mount")
-	}
 	joined := strings.Join(p.harnessArgv, "\x00")
+	for i := 0; i+1 < len(p.harnessArgv); i++ {
+		if p.harnessArgv[i] == "--mount" && strings.Contains(p.harnessArgv[i+1], "egress-ca") {
+			t.Fatalf("CA file mounted into harness: %s", p.harnessArgv[i+1])
+		}
+	}
+	if strings.Contains(joined, "/etc/reviewd/egress-ca.pem") {
+		t.Fatal("CA bundle path in harness argv; harness reads the derived input file instead")
+	}
 	if strings.Contains(joined, "real-secret-value") {
 		t.Fatal("real credential value in harness argv")
 	}
@@ -103,7 +108,7 @@ func TestPlanEgressProxy(t *testing.T) {
 	if p.proxyArgv[0] != "run" || p.proxyArgv[1] != "-d" {
 		t.Fatalf("proxy not detached: %v", p.proxyArgv[:2])
 	}
-	for _, want := range []string{"reviewd.role=egress", "reviewd-egress-123456"} {
+	for _, want := range []string{"reviewd.role=egress", "reviewd-egress-123456", "--pids-limit=256", "--memory=2g"} {
 		if !slices.Contains(p.proxyArgv, want) {
 			t.Fatalf("missing proxy argv %s: %v", want, p.proxyArgv)
 		}

@@ -92,7 +92,10 @@ func serve(args []string) error {
 	return nil
 }
 
+const maxProxyConns = 32
+
 func (s *server) serveListener(ln net.Listener) {
+	slots := make(chan struct{}, maxProxyConns)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -102,7 +105,16 @@ func (s *server) serveListener(ln net.Listener) {
 			stdLog.Printf("accept: %v", err)
 			continue
 		}
-		go s.handle(conn)
+		select {
+		case slots <- struct{}{}:
+			go func() {
+				defer func() { <-slots }()
+				s.handle(conn)
+			}()
+		default:
+			stdLog.Printf("accept: too many connections")
+			_ = conn.Close()
+		}
 	}
 }
 
