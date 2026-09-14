@@ -14,17 +14,23 @@ const (
 	maxParticipantLabelBytes = 64
 )
 
+// participantIDPattern matches the strict-subset IDs: start with a letter,
+// use only letters, digits, _ and -, and never end with -. Mermaid rejects
+// a trailing dash that directly abuts an arrow or colon, and the spaced
+// exceptions are too subtle for generated diagrams to rely on.
+const participantIDPattern = `[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?`
+
 var (
-	sequenceMessageRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_-]*?)\s*(-->>|->>|--\)|-\)|--x|-x|-->|->)\s*([+-])?\s*([A-Za-z][A-Za-z0-9_-]*)\s*:(.*)$`)
-	participantRe     = regexp.MustCompile(`^(participant|actor)\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s+as\s+(.+))?$`)
-	createRe          = regexp.MustCompile(`^create\s+(participant|actor)\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s+as\s+(.+))?$`)
-	destroyRe         = regexp.MustCompile(`^destroy\s+([A-Za-z][A-Za-z0-9_-]*)$`)
-	activateRe        = regexp.MustCompile(`^(activate|deactivate)\s+([A-Za-z][A-Za-z0-9_-]*)$`)
+	sequenceMessageRe = regexp.MustCompile(`^(` + participantIDPattern + `)\s*(-->>|->>|--\)|-\)|--x|-x|-->|->)\s*([+-])?\s*(` + participantIDPattern + `)\s*:(.*)$`)
+	participantRe     = regexp.MustCompile(`^(participant|actor)\s+(` + participantIDPattern + `)(?:\s+as\s+(.+))?$`)
+	createRe          = regexp.MustCompile(`^create\s+(participant|actor)\s+(` + participantIDPattern + `)(?:\s+as\s+(.+))?$`)
+	destroyRe         = regexp.MustCompile(`^destroy\s+(` + participantIDPattern + `)$`)
+	activateRe        = regexp.MustCompile(`^(activate|deactivate)\s+(` + participantIDPattern + `)$`)
 	noteRe            = regexp.MustCompile(`^Note\s+(left of|right of|over)\s+(.+?)\s*:\s*(.*)$`)
 	blockStartRe      = regexp.MustCompile(`^(loop|alt|opt|par|critical|break|rect|box)(?:\s+(.*))?$`)
 	blockMiddleRe     = regexp.MustCompile(`^(else|and|option)(?:\s+(.*))?$`)
 	titleRe           = regexp.MustCompile(`^title:\s+(.+)$`)
-	participantIDRe   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+	participantIDRe   = regexp.MustCompile(`^` + participantIDPattern + `$`)
 )
 
 // sequenceLifecycle mirrors Mermaid's sequenceDb rules for create, destroy,
@@ -205,7 +211,7 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return nil
 	}
 	if strings.HasPrefix(line, "participant ") || strings.HasPrefix(line, "actor ") {
-		return fmt.Errorf("sequence diagram line %d: use \"participant ID\" or \"participant ID as Display Name\" with ID starting with a letter (letters, digits, _ and - only)", lineno)
+		return fmt.Errorf("sequence diagram line %d: use \"participant ID\" or \"participant ID as Display Name\" (IDs start with a letter, use only letters, digits, _ and -, and must not end with -)", lineno)
 	}
 	if m := createRe.FindStringSubmatch(line); m != nil {
 		if inBox {
@@ -222,7 +228,7 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return nil
 	}
 	if strings.HasPrefix(line, "create ") {
-		return fmt.Errorf("sequence diagram line %d: use \"create participant ID\" with an ID starting with a letter", lineno)
+		return fmt.Errorf("sequence diagram line %d: use \"create participant ID\" (IDs start with a letter, use only letters, digits, _ and -, and must not end with -)", lineno)
 	}
 	if m := destroyRe.FindStringSubmatch(line); m != nil {
 		life.pendingDestroy, life.hasDestroy = m[1], true
@@ -243,7 +249,7 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return nil
 	}
 	if strings.HasPrefix(line, "destroy ") || strings.HasPrefix(line, "activate ") || strings.HasPrefix(line, "deactivate ") {
-		return fmt.Errorf("sequence diagram line %d: use \"%s ID\" with an ID starting with a letter (letters, digits, _ and - only)", lineno, strings.Fields(line)[0])
+		return fmt.Errorf("sequence diagram line %d: use \"%s ID\" (IDs start with a letter, use only letters, digits, _ and -, and must not end with -)", lineno, strings.Fields(line)[0])
 	}
 	if m := noteRe.FindStringSubmatch(line); m != nil {
 		if inBox {
@@ -253,7 +259,7 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		for _, id := range ids {
 			id = strings.TrimSpace(id)
 			if !participantIDRe.MatchString(id) {
-				return fmt.Errorf("sequence diagram line %d: note participants must be IDs starting with a letter (got %q); use \"Note over A,B: text\"", lineno, trimForError(id))
+				return fmt.Errorf("sequence diagram line %d: note participants must be IDs starting with a letter and not ending with - (got %q); use \"Note over A,B: text\"", lineno, trimForError(id))
 			}
 		}
 		if m[1] != "over" && len(ids) != 1 {
@@ -305,7 +311,7 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return nil
 	}
 	if strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
-		return fmt.Errorf("sequence diagram line %d: messages need \"Sender->>Receiver: text\" with IDs starting with a letter and an arrow of ->, -->, ->>, -->>, -x, --x, -) or --)", lineno)
+		return fmt.Errorf("sequence diagram line %d: messages need \"Sender->>Receiver: text\" with IDs starting with a letter, not ending with -, and an arrow of ->, -->, ->>, -->>, -x, --x, -) or --)", lineno)
 	}
 	if !strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
 		return fmt.Errorf("sequence diagram line %d: messages need a colon (\"A->>B: text\"); got %q", lineno, trimForError(line))

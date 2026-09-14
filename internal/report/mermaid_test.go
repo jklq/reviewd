@@ -60,6 +60,7 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\n titleCase->>B: Hi",
 		"sequenceDiagram\rA->>B: Hi",
 		"sequenceDiagram\r\nA->>B: Hi\rB-->>A: Yo",
+		"sequenceDiagram\n A-B->>C-D: Hi",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
@@ -162,6 +163,18 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"title without colon": "sequenceDiagram\n title Checkout\n A->>B: Hi",
 		"lone cr comment":     "sequenceDiagram\n %%\rgraph TD\n A->>B: Hi",
 		"lone cr smuggling":   "sequenceDiagram\n A->>B: Hi\rgarbage",
+		"extra hyphen":        "sequenceDiagram\n A--->B: hi",
+		"extra hyphen 4":      "sequenceDiagram\n A---->B: hi",
+		"dash receiver":       "sequenceDiagram\n A-->B-: hi",
+		"dash note":           "sequenceDiagram\n X->>Y: Hi\n Note over A-: x",
+		// Trailing-dash IDs are Mermaid-valid in some positions, but the
+		// strict subset bans them everywhere: the spacing-dependent
+		// exceptions are too subtle for generated diagrams to rely on.
+		"dash participant":   "sequenceDiagram\n participant A-\n A->>B: Hi",
+		"dash activate":      "sequenceDiagram\n X->>Y: Hi\n activate A-",
+		"dash destroy":       "sequenceDiagram\n X->>Y: Hi\n destroy A-",
+		"dash create":        "sequenceDiagram\n create participant A-\n X->>A: Hi",
+		"dash sender spaced": "sequenceDiagram\n A- ->>B: hi",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {

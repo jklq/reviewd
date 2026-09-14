@@ -165,8 +165,9 @@ exactly `sequenceDiagram`, followed by one statement per line: `participant ID`
 or `participant ID as Display Name`, messages as `Sender->>Receiver: short text`
 (also --> -->> -x --x -) --)), `Note left of A: text` / `Note over A,B: text`,
 and `loop`/`alt`/`opt`/`par`/`critical`/`break`/`rect`/`box` blocks closed with
-`end`. IDs start with a letter and use only letters, digits, `_` and `-`; use
-`as` for display names with spaces. Every message needs a colon and non-empty
+`end`. IDs start with a letter, use only letters, digits, `_` and `-`, and
+must not end with `-`; use `as` for display names with spaces. Every message
+needs a colon and non-empty
 text without backticks, angle brackets, semicolons, or `#` (it starts a
 Mermaid comment). Use `else` only inside
 `alt`; `Note over` takes at most two participants; `box` holds participant,
