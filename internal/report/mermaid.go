@@ -23,7 +23,7 @@ var (
 	noteRe            = regexp.MustCompile(`^Note\s+(left of|right of|over)\s+(.+?)\s*:\s*(.*)$`)
 	blockStartRe      = regexp.MustCompile(`^(loop|alt|opt|par|critical|break|rect|box)(?:\s+(.*))?$`)
 	blockMiddleRe     = regexp.MustCompile(`^(else|and|option)(?:\s+(.*))?$`)
-	titleRe           = regexp.MustCompile(`^title\s*:\s*(.+)$`)
+	titleRe           = regexp.MustCompile(`^title:\s+(.+)$`)
 	participantIDRe   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 )
 
@@ -305,6 +305,12 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 	}
 	if !strings.Contains(line, ":") && (strings.Contains(line, "->") || strings.Contains(line, "-->") || strings.Contains(line, "-x") || strings.Contains(line, "-)")) {
 		return fmt.Errorf("sequence diagram line %d: messages need a colon (\"A->>B: text\"); got %q", lineno, trimForError(line))
+	}
+	if line == "title" || strings.HasPrefix(line, "title ") || strings.HasPrefix(line, "title\t") || strings.HasPrefix(line, "title:") {
+		if inBox {
+			return boxErr
+		}
+		return fmt.Errorf("sequence diagram line %d: use \"title: Text\" with a space after the colon", lineno)
 	}
 	// Anything starting with another diagram's header that is not a valid
 	// statement (a message from an ID like graph is handled above) is a
