@@ -94,6 +94,30 @@ func TestDeletedAndRenamedAnchors(t *testing.T) {
 	}
 }
 
+func TestModelAndHarnessAttribution(t *testing.T) {
+	r := validReport()
+	r.Harness = "codex"
+	r.Model = "gpt-5.6-luna"
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if s := r.Markdown("abc"); !strings.Contains(s, "Reviewed by reviewd using codex (gpt-5.6-luna).") {
+		t.Fatal(s)
+	}
+	r.Model = ""
+	if s := r.Markdown("abc"); !strings.Contains(s, "Reviewed by reviewd using codex.") {
+		t.Fatal(s)
+	}
+	r.Harness, r.Model = "", "gpt-5.6-luna"
+	if s := r.Markdown("abc"); !strings.Contains(s, "Reviewed by reviewd using model gpt-5.6-luna.") {
+		t.Fatal(s)
+	}
+	r.Model = "two\nlines"
+	if r.Validate() == nil {
+		t.Fatal("multiline model accepted")
+	}
+}
+
 func TestServerReasonsAndCommentCapRespectReportLimits(t *testing.T) {
 	r := validReport()
 	r.Reasons = []string{"one", "two", "three", "four"}

@@ -24,6 +24,8 @@ type Context struct {
 	Role          string   `json:"role"`
 	Index         int      `json:"index"`
 	Total         int      `json:"total"`
+	Harness       string   `json:"harness,omitempty"`
+	Model         string   `json:"model,omitempty"`
 	MinConfidence float64  `json:"min_finding_confidence"`
 	Coverage      []string `json:"coverage_limitations,omitempty"`
 }
@@ -107,6 +109,8 @@ func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []
 	}
 	meta.Role = role
 	meta.Index = index
+	meta.Harness = harness
+	meta.Model = eng.Config.Harnesses[harness].Model
 	for name, v := range map[string]any{"context.json": meta, "files.json": files, "candidates.json": candidates} {
 		if err := store.WriteJSON(filepath.Join(input, name), v); err != nil {
 			return report.Report{}, err
@@ -117,9 +121,21 @@ func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []
 			return report.Report{}, err
 		}
 	}
-	prompt := fmt.Sprintf("Read /review/AGENTS.md and follow its full review protocol. You are %s %d of %d. Review /review/files.json against /workspace and /review/base. Read context and trusted policy in /review. Work directly: do not spawn subagents or delegate to other agents. Keep the report terse: a one-paragraph summary, at most three one-sentence confidence reasons and short finding bodies. Submit your complete report with reviewd agent submit. Do not stop at a chat response.", role, index+1, eng.Config.Parallelism)
+	prompt := fmt.Sprintf("Read /review/AGENTS.md and follow its full review protocol. You are %s %d of %d. Review /review/files.json against /workspace and /review/base. Read context and trusted policy in /review. Set the overview harness and model fields to the harness and model you are running as, from /review/context.json or your own configuration, and report the actual model if it differs. Work directly: do not spawn subagents or delegate to other agents. Keep the report terse: a one-paragraph summary, at most three one-sentence confidence reasons and short finding bodies. Submit your complete report with reviewd agent submit. Do not stop at a chat response.", role, index+1, eng.Config.Parallelism)
 	if role == "validator" {
 		prompt += " Independently validate and semantically deduplicate /review/candidates.json; report only substantiated findings and reassess merge confidence."
 	}
-	return eng.Runner.Run(ctx, sandbox.Request{Harness: eng.Config.Harnesses[harness], Source: filepath.Join(dir, "head"), Base: filepath.Join(dir, "base"), Input: input, Output: output, Role: role, Index: index, Prompt: prompt})
+	result, err := eng.Runner.Run(ctx, sandbox.Request{Harness: eng.Config.Harnesses[harness], Source: filepath.Join(dir, "head"), Base: filepath.Join(dir, "base"), Input: input, Output: output, Role: role, Index: index, Prompt: prompt})
+	if err != nil {
+		return result, err
+	}
+	// The server knows the configured harness and declared model even when the
+	// agent does not report its own; keep the operator's values as the fallback.
+	if result.Harness == "" {
+		result.Harness = harness
+	}
+	if result.Model == "" {
+		result.Model = eng.Config.Harnesses[harness].Model
+	}
+	return result, nil
 }

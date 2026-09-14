@@ -82,10 +82,11 @@ Edit `reviewd.json` and restart. `parallelism` controls reviewers per PR.
 `validator` selects the independent final pass.
 
 Each harness defines an image and a command argument array containing
-`{{.Prompt}}` or `{{.PromptFile}}`. Custom harnesses can pass credential names
-through `env`, or select shared refresh definitions through `credentials`. Adding
-a harness requires only configuration and its image. See the
-[configuration reference](docs/configuration.md) and
+`{{.Prompt}}` or `{{.PromptFile}}`, and may declare the `model` its command
+selects. Published reviews name the harness and model that produced them. Custom
+harnesses can pass credential names through `env`, or select shared refresh
+definitions through `credentials`. Adding a harness requires only configuration
+and its image. See the [configuration reference](docs/configuration.md) and
 [agent reporting protocol](internal/report/AGENTS.md).
 
 ## Operate

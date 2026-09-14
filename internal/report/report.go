@@ -33,7 +33,18 @@ type Report struct {
 	Reasons         []string  `json:"reasons"`
 	ImportantFiles  []File    `json:"important_files"`
 	SequenceDiagram string    `json:"sequence_diagram"`
+	Model           string    `json:"model,omitempty"`
+	Harness         string    `json:"harness,omitempty"`
 	Findings        []Finding `json:"findings"`
+}
+
+// ValidateAttribution bounds untrusted display text placed in the published
+// review, such as harness and model names: single-line and bounded.
+func ValidateAttribution(name, value string) error {
+	if len(value) > 120 || strings.ContainsAny(value, "\x00\r\n") {
+		return fmt.Errorf("%s must be a single line of at most 120 bytes", name)
+	}
+	return nil
 }
 
 func SafePath(p string) bool {
@@ -57,6 +68,12 @@ func (f Finding) Validate() error {
 func (r Report) Validate() error {
 	if strings.TrimSpace(r.Summary) == "" || len(r.Summary) > 2000 {
 		return errors.New("summary is required (<=2000 bytes)")
+	}
+	if err := ValidateAttribution("model", r.Model); err != nil {
+		return err
+	}
+	if err := ValidateAttribution("harness", r.Harness); err != nil {
+		return err
 	}
 	if r.Confidence == nil || *r.Confidence < 0 || *r.Confidence > 5 {
 		return errors.New("merge confidence is required (integer 0..5)")
@@ -188,6 +205,23 @@ func (r Report) Markdown(marker string) string {
 	}
 	b.WriteString("\n</details>\n\n<details>\n<summary>Relevant sequence diagram</summary>\n\n```mermaid\n")
 	b.WriteString(r.SequenceDiagram)
-	b.WriteString("\n```\n\n</details>\n\n*Reviewed by reviewd. Confidence reflects review evidence, not a guarantee.*\n")
+	b.WriteString("\n```\n\n</details>\n\n*Reviewed by reviewd")
+	b.WriteString(r.attribution())
+	b.WriteString(". Confidence reflects review evidence, not a guarantee.*\n")
 	return b.String()
+}
+
+// attribution names the harness and model that produced the review when known.
+func (r Report) attribution() string {
+	harness := strings.TrimSpace(prose(r.Harness))
+	model := strings.TrimSpace(prose(r.Model))
+	switch {
+	case harness != "" && model != "":
+		return " using " + harness + " (" + model + ")"
+	case harness != "":
+		return " using " + harness
+	case model != "":
+		return " using model " + model
+	}
+	return ""
 }

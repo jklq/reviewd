@@ -152,6 +152,9 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 		if err := json.Unmarshal([]byte(command), &h.Command); err != nil {
 			return err
 		}
+		// A custom command owns its model selection; do not attribute the
+		// default Codex model to it.
+		h.Model = ""
 	}
 	h.Env = nil
 	if env != "" {

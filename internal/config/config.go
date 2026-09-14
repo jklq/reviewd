@@ -16,12 +16,15 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"reviewd/internal/report"
 )
 
 type Harness struct {
 	Image       string   `json:"image"`
 	Command     []string `json:"command"`
-	Env         []string `json:"env,omitempty"` // Names explicitly forwarded from the operator environment.
+	Model       string   `json:"model,omitempty"` // Declared model, recorded in reviews when the agent does not report one.
+	Env         []string `json:"env,omitempty"`   // Names explicitly forwarded from the operator environment.
 	Network     string   `json:"network"`
 	Credentials []string `json:"credentials,omitempty"`
 }
@@ -175,6 +178,14 @@ func (c Config) Validate() error {
 		}
 		if !name.MatchString(n) || h.Image == "" || strings.HasPrefix(h.Image, "-") || len(h.Command) == 0 || h.Command[0] == "" {
 			return fmt.Errorf("invalid harness %q", n)
+		}
+		if err := report.ValidateAttribution("model", h.Model); err != nil {
+			return fmt.Errorf("%s: %w", n, err)
+		}
+		// The harness name is stamped into every review's attribution, so a
+		// name the report rejects must fail here rather than on every run.
+		if err := report.ValidateAttribution("harness", n); err != nil {
+			return fmt.Errorf("%s: %w", n, err)
 		}
 		if h.Network != "bridge" && h.Network != "none" && !strings.HasPrefix(h.Network, "reviewd-") {
 			return fmt.Errorf("%s: network must be bridge, none or reviewd-*", n)
