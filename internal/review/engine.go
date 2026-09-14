@@ -1,4 +1,5 @@
-// Package review orchestrates independent review passes and a final validator.
+// Package review orchestrates independent review passes and a final validator,
+// except a lone reviewer is already the final pass.
 package review
 
 import (
@@ -74,9 +75,15 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 	if err = store.WriteJSON(filepath.Join(dir, "candidates.json"), candidates); err != nil {
 		return report.Report{}, err
 	}
-	result, err := eng.runOne(ctx, dir, meta, files, "validator", 0, eng.Config.Validator, candidates)
-	if err != nil {
-		return result, fmt.Errorf("validator: %w", err)
+	var result report.Report
+	if eng.Config.Parallelism == 1 {
+		result = candidates[0]
+	} else {
+		var err error
+		result, err = eng.runOne(ctx, dir, meta, files, "validator", 0, eng.Config.Validator, candidates)
+		if err != nil {
+			return result, fmt.Errorf("validator: %w", err)
+		}
 	}
 	if err = diff.Validate(result); err != nil {
 		return result, err

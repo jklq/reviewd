@@ -101,7 +101,7 @@ reviewd jobs report JOB_ID --config /etc/reviewd/reviewd.json
 reviewd jobs retry JOB_ID --config /etc/reviewd/reviewd.json
 ```
 
-A failed harness never produces a clean review. All reviewers must succeed and submit valid reports, and then the validator must do the same. Reviews retry up to three attempts. If saving completion fails, the worker retries the write until storage recovers or the service stops. GitHub errors retry on the durable job schedule, including throttling. Large deployments may need lower `workers` or `parallelism` for quota limits.
+A failed harness never produces a clean review. All reviewers must succeed and submit valid reports, and then the validator must do the same (with parallelism 1 the single reviewer is the final report). Reviews retry up to three attempts. If saving completion fails, the worker retries the write until storage recovers or the service stops. GitHub errors retry on the durable job schedule, including throttling. Large deployments may need lower `workers` or `parallelism` for quota limits.
 
 Each run stores:
 - `context.json`, `files.json`: original PR context and diff

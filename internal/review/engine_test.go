@@ -64,6 +64,24 @@ func TestParallelReviewThenValidator(t *testing.T) {
 		t.Fatalf("unattributed review: %+v", r)
 	}
 }
+func TestSingleReviewerSkipsValidator(t *testing.T) {
+	c := config.Default()
+	c.Parallelism = 1
+	c.Harnesses["other"] = c.Harnesses[c.Validator]
+	c.Validator = "other"
+	runner := &fakeRunner{}
+	engine := Engine{c, runner}
+	r, err := engine.Run(context.Background(), t.TempDir(), Context{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runner.max != 1 || runner.reviewers != 1 || runner.validators != 0 {
+		t.Fatalf("expected a single reviewer pass: %+v", runner)
+	}
+	if r.Harness != c.Reviewers[0] || r.Model != c.Harnesses[c.Reviewers[0]].Model {
+		t.Fatalf("single pass must keep reviewer attribution: %+v", r)
+	}
+}
 func TestWorkerFailureCannotBecomeCleanReview(t *testing.T) {
 	c := config.Default()
 	c.Parallelism = 2

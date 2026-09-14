@@ -97,7 +97,7 @@ func run(args []string) error {
 	if cmd == "init" {
 		defaults := config.Default()
 		h := defaults.Harnesses[defaults.Reviewers[0]]
-		parallel = fs.Int("parallelism", defaults.Parallelism, "parallel review containers, plus one validator")
+		parallel = fs.Int("parallelism", defaults.Parallelism, "parallel review containers, plus one validator when above 1")
 		image = fs.String("image", h.Image, "default harness image")
 		command = fs.String("command", "", "JSON command argument array")
 		env = fs.String("harness-env", strings.Join(h.Env, ","), "comma-separated environment names for a custom harness")

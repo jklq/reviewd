@@ -14,7 +14,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `credentials` | Codex | Shared refresh definitions |
 | `reviewers` | `["codex"]` | Round-robin harness selection |
 | `parallelism` | `1` | 1–16 concurrent reviewers per PR |
-| `validator` | `codex` | Final independent pass harness |
+| `validator` | `codex` | Final independent pass harness (unused when `parallelism` is 1) |
 | `workers` | `2` | 1–32 simultaneously active PR jobs |
 | `timeout` | `20m` | Whole job deadline, all stages (1s–2h) |
 | `memory` | `2g` | Per-container memory limit (integer `m` or `g`) |
@@ -24,7 +24,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `policy` | empty | Trusted review policy text |
 | `allow_forks` | `false` | Review fork PRs |
 
-Maximum **concurrent** reviewer containers = `workers × parallelism`. Validation uses one container per job. Defaults run two PR jobs at a time, each one reviewer then one validator. Independent reviews of the same PR are serialized. Each attempt can invoke `parallelism + 1` harnesses. Retries multiply model usage.
+Maximum **concurrent** reviewer containers = `workers × parallelism`. Validation uses one container per job, except parallelism 1 runs its single reviewer as the final pass with no separate validator. Defaults run two PR jobs at a time, each a single reviewer pass. Independent reviews of the same PR are serialized. Each attempt can invoke `parallelism + 1` harnesses (one total when `parallelism` is 1). Retries multiply model usage.
 
 Harness `env` lists variable **names**, not values. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
 
