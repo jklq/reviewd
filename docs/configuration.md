@@ -17,7 +17,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `validator` | `codex` | Final independent pass harness (unused when `parallelism` is 1) |
 | `size_tiers` | none | Optional PR-size routing to harness sets |
 | `workers` | `2` | 1–32 simultaneously active PR jobs |
-| `timeout` | `20m` | Whole job deadline, all stages (1s–2h) |
+| `timeout` | `45m` | Whole job deadline, all stages (1s–2h) |
 | `memory` | `2g` | Per-container memory limit (integer `m` or `g`) |
 | `cpus` | `2` | Per-container CPU limit (≥1) |
 | `max_findings` | `20` | Max published inline findings (1–50) |
