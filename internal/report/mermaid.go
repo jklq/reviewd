@@ -328,8 +328,8 @@ func validateParticipantLabel(label string, lineno int) error {
 	if strings.Contains(label, "`") || strings.Contains(label, "<") || strings.Contains(label, ">") {
 		return fmt.Errorf("sequence diagram line %d: participant labels must not contain backticks or angle brackets", lineno)
 	}
-	if strings.Contains(label, ":") || strings.Contains(label, ";") {
-		return fmt.Errorf("sequence diagram line %d: participant labels must not contain : or ;", lineno)
+	if strings.Contains(label, ":") || strings.Contains(label, ";") || strings.Contains(label, "#") {
+		return fmt.Errorf("sequence diagram line %d: participant labels must not contain #, : or ;", lineno)
 	}
 	return nil
 }
@@ -347,6 +347,9 @@ func validateMessageText(text string, lineno int, counter ...*int) error {
 	}
 	if strings.Contains(trimmed, ";") {
 		return fmt.Errorf("sequence diagram line %d: message text must not contain semicolons; Mermaid splits statements there, so keep one statement per line", lineno)
+	}
+	if strings.Contains(trimmed, "#") {
+		return fmt.Errorf("sequence diagram line %d: message text must not contain #; Mermaid treats it as a comment, so rephrase without it (for example issue 123)", lineno)
 	}
 	if len(counter) > 0 && counter[0] != nil {
 		*counter[0]++
@@ -370,6 +373,9 @@ func validateFreeText(text string, lineno int, allowEmpty bool) error {
 	}
 	if strings.Contains(trimmed, ";") {
 		return fmt.Errorf("sequence diagram line %d: block labels must not contain semicolons; Mermaid splits statements there, so keep one statement per line", lineno)
+	}
+	if strings.Contains(trimmed, "#") {
+		return fmt.Errorf("sequence diagram line %d: block labels must not contain #; Mermaid treats it as a comment, so rephrase without it", lineno)
 	}
 	return nil
 }

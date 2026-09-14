@@ -148,6 +148,11 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"dup note create":      "sequenceDiagram\n X->>Y: Hi\n Note over A: x\n create participant A\n X->>A: Yo",
 		"dup create twice":     "sequenceDiagram\n create participant A\n X->>A: Hi\n create participant A\n Y->>A: Yo",
 		"dup after destroy":    "sequenceDiagram\n participant A\n A->>B: Hi\n destroy A\n B->>A: Bye\n create participant A\n X->>A: Yo",
+		"hash message":         "sequenceDiagram\n A->>B: issue #123",
+		"hash note":            "sequenceDiagram\n A->>B: Hi\n Note over A: #1 priority",
+		"hash title":           "sequenceDiagram\n title: Sprint #3\n A->>B: Hi",
+		"hash block":           "sequenceDiagram\n loop Sprint #2\n A->>B: Hi\n end",
+		"hash label":           "sequenceDiagram\n participant A as C# dev\n A->>B: Hi",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {
