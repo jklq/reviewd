@@ -133,7 +133,13 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 			return fmt.Errorf("sequence diagram line %d: only sequenceDiagram is allowed; got %q", lineno, trimForError(line))
 		}
 	}
+	// Mermaid box sections hold participant, actor, and destroy lines only.
+	inBox := len(*stack) > 0 && (*stack)[len(*stack)-1] == "box"
+	boxErr := fmt.Errorf("sequence diagram line %d: only participant, actor, and destroy lines are allowed inside a box; move this statement outside", lineno)
 	if line == "autonumber" || line == "autonumber off" {
+		if inBox {
+			return boxErr
+		}
 		return nil
 	}
 	if line == "end" {
@@ -153,7 +159,7 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		top := (*stack)[len(*stack)-1]
 		switch m[1] {
 		case "else":
-			if top != "alt" && top != "opt" {
+			if top != "alt" {
 				return fmt.Errorf("sequence diagram line %d: \"else\" is only valid inside an alt block (open block is %q)", lineno, top)
 			}
 		case "and":
@@ -168,6 +174,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return validateFreeText(m[2], lineno, true)
 	}
 	if m := blockStartRe.FindStringSubmatch(line); m != nil {
+		if inBox {
+			return boxErr
+		}
 		keyword, label := m[1], strings.TrimSpace(m[2])
 		switch keyword {
 		case "loop", "alt", "opt":
@@ -195,6 +204,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return fmt.Errorf("sequence diagram line %d: use \"participant ID\" or \"participant ID as Display Name\" with ID starting with a letter (letters, digits, _ and - only)", lineno)
 	}
 	if m := createRe.FindStringSubmatch(line); m != nil {
+		if inBox {
+			return boxErr
+		}
 		if err := validateParticipantLabel(m[3], lineno); err != nil {
 			return err
 		}
@@ -209,6 +221,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return nil
 	}
 	if m := activateRe.FindStringSubmatch(line); m != nil {
+		if inBox {
+			return boxErr
+		}
 		if m[1] == "activate" {
 			life.activations[m[2]]++
 			return nil
@@ -223,6 +238,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return fmt.Errorf("sequence diagram line %d: use \"%s ID\" with an ID starting with a letter (letters, digits, _ and - only)", lineno, strings.Fields(line)[0])
 	}
 	if m := noteRe.FindStringSubmatch(line); m != nil {
+		if inBox {
+			return boxErr
+		}
 		ids := strings.Split(m[2], ",")
 		for _, id := range ids {
 			id = strings.TrimSpace(id)
@@ -233,6 +251,9 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		if m[1] != "over" && len(ids) != 1 {
 			return fmt.Errorf("sequence diagram line %d: \"Note %s\" takes exactly one participant; use \"Note over A,B: text\" for several", lineno, m[1]+" of")
 		}
+		if m[1] == "over" && len(ids) > 2 {
+			return fmt.Errorf("sequence diagram line %d: \"Note over\" takes at most two participants; use \"Note over A,B: text\"", lineno)
+		}
 		return validateMessageText(m[3], lineno)
 	}
 	if strings.HasPrefix(line, "Note ") || line == "Note" {
@@ -242,9 +263,15 @@ func validateSequenceLine(line string, lineno int, stack *[]string, messages *in
 		return fmt.Errorf("sequence diagram line %d: the Note keyword is capitalized (\"Note left of A: text\")", lineno)
 	}
 	if m := titleRe.FindStringSubmatch(line); m != nil {
+		if inBox {
+			return boxErr
+		}
 		return validateMessageText(m[1], lineno)
 	}
 	if m := sequenceMessageRe.FindStringSubmatch(line); m != nil {
+		if inBox {
+			return boxErr
+		}
 		if err := life.consumeMessage(m[1], m[4], lineno); err != nil {
 			return err
 		}
@@ -298,6 +325,9 @@ func validateMessageText(text string, lineno int, counter ...*int) error {
 	if strings.Contains(trimmed, "`") || strings.Contains(trimmed, "<") || strings.Contains(trimmed, ">") {
 		return fmt.Errorf("sequence diagram line %d: message text must not contain backticks or angle brackets; rephrase without HTML", lineno)
 	}
+	if strings.Contains(trimmed, ";") {
+		return fmt.Errorf("sequence diagram line %d: message text must not contain semicolons; Mermaid splits statements there, so keep one statement per line", lineno)
+	}
 	if len(counter) > 0 && counter[0] != nil {
 		*counter[0]++
 	}
@@ -317,6 +347,9 @@ func validateFreeText(text string, lineno int, allowEmpty bool) error {
 	}
 	if strings.Contains(trimmed, "`") || strings.Contains(trimmed, "<") || strings.Contains(trimmed, ">") {
 		return fmt.Errorf("sequence diagram line %d: block labels must not contain backticks or angle brackets", lineno)
+	}
+	if strings.Contains(trimmed, ";") {
+		return fmt.Errorf("sequence diagram line %d: block labels must not contain semicolons; Mermaid splits statements there, so keep one statement per line", lineno)
 	}
 	return nil
 }

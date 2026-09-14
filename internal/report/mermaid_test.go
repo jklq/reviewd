@@ -48,6 +48,7 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\n activate B\n B-->>-A: Done",
 		"sequenceDiagram\n A->>+B: Start\n deactivate B",
 		"sequenceDiagram\n A->>+A: Self\n A-->>-A: End",
+		"sequenceDiagram\n box Aqua Team\n participant A\n participant B\n destroy B\n end\n A->>B: Hi",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
@@ -119,6 +120,21 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"activate bare":        "sequenceDiagram\n A->>B: Hi\n activate",
 		"long block line":      "sequenceDiagram\n loop " + strings.Repeat("L", 495) + "\n A->>B: Hi",
 		"oversized label":      "sequenceDiagram\n participant A as " + strings.Repeat("z", 65) + "\n A->>B: Hi",
+		"else in opt":          "sequenceDiagram\n opt Maybe\n A->>B: x\n else Other\n A->>B: y\n end",
+		"note over three":      "sequenceDiagram\n A->>B: Hi\n Note over A,B,C: x",
+		"semicolon message":    "sequenceDiagram\n A->>B: a;b",
+		"semicolon note":       "sequenceDiagram\n A->>B: Hi\n Note over A: x;y",
+		"semicolon title":      "sequenceDiagram\n title: a;b\n A->>B: Hi",
+		"semicolon block":      "sequenceDiagram\n loop A;B\n A->>B: Hi\n end",
+		"semicolon else":       "sequenceDiagram\n alt A\n A->>B: x\n else O;ther\n A->>B: y\n end",
+		"message in box":       "sequenceDiagram\n box Aqua Team\n participant A\n A->>B: Hi\n end",
+		"note in box":          "sequenceDiagram\n box Aqua Team\n participant A\n Note over A: x\n end",
+		"create in box":        "sequenceDiagram\n box Aqua Team\n create participant B\n end\n A->>B: Hi",
+		"activate in box":      "sequenceDiagram\n box Aqua Team\n participant A\n activate A\n end\n A->>B: Hi",
+		"loop in box":          "sequenceDiagram\n box Aqua Team\n participant A\n loop X\n A->>B: Hi\n end\n end",
+		"title in box":         "sequenceDiagram\n box Aqua Team\n title: T\n end\n A->>B: Hi",
+		"autonumber in box":    "sequenceDiagram\n box Aqua Team\n autonumber\n end\n A->>B: Hi",
+		"box in box":           "sequenceDiagram\n box Outer\n box Inner\n end\n end\n A->>B: Hi",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {
@@ -238,6 +254,27 @@ func TestValidateSequenceDiagramActivationShorthandTargets(t *testing.T) {
 	}
 	if err := ValidateSequenceDiagram("sequenceDiagram\n A->>+B: S\n A-->>-B: D"); err == nil {
 		t.Error("- deactivating a never-activated sender accepted")
+	}
+}
+
+func TestValidateSequenceDiagramSubsetRestrictions(t *testing.T) {
+	cases := map[string]string{
+		"sequenceDiagram\n opt Maybe\n A->>B: x\n else Other\n A->>B: y\n end": `"else" is only valid inside an alt block`,
+		"sequenceDiagram\n A->>B: Hi\n Note over A,B,C: x":                     `"Note over" takes at most two participants`,
+		"sequenceDiagram\n A->>B: a;b":                                         "must not contain semicolons",
+		"sequenceDiagram\n loop A;B\n A->>B: Hi\n end":                         "must not contain semicolons",
+		"sequenceDiagram\n box T\n participant A\n A->>B: Hi\n end":            "allowed inside a box",
+		"sequenceDiagram\n box T\n participant A\n Note over A: x\n end":       "allowed inside a box",
+	}
+	for src, want := range cases {
+		err := ValidateSequenceDiagram(src)
+		if err == nil {
+			t.Errorf("accepted:\n%s", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q\n%s", err.Error(), want, src)
+		}
 	}
 }
 
