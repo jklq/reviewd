@@ -13,7 +13,7 @@ Requires Linux, Go 1.25+, Docker, and a GitHub App.
 ```sh
 make build
 make codex-image
-./bin/reviewd init --app-id YOUR_APP_ID --parallelism 2
+./bin/reviewd init --app-id YOUR_APP_ID --parallelism 1
 ```
 
 The default Codex harness uses a ChatGPT account login. Install Codex CLI and
