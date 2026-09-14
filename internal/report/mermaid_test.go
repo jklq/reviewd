@@ -58,6 +58,8 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\n X->>Y: Hi\n activate B\n create participant B\n X->>B: Yo",
 		"sequenceDiagram\n X->>Y: Hi\n destroy B\n create participant B\n X->>B: Yo",
 		"sequenceDiagram\n titleCase->>B: Hi",
+		"sequenceDiagram\rA->>B: Hi",
+		"sequenceDiagram\r\nA->>B: Hi\rB-->>A: Yo",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
@@ -158,6 +160,8 @@ func TestValidateSequenceDiagramRejectsBrokenSyntax(t *testing.T) {
 		"title space colon":    "sequenceDiagram\n title : Text\n A->>B: Hi",
 		// Valid Mermaid, but outside the strict subset: harnesses must use "title: Text".
 		"title without colon": "sequenceDiagram\n title Checkout\n A->>B: Hi",
+		"lone cr comment":     "sequenceDiagram\n %%\rgraph TD\n A->>B: Hi",
+		"lone cr smuggling":   "sequenceDiagram\n A->>B: Hi\rgarbage",
 	}
 	for name, src := range cases {
 		if err := ValidateSequenceDiagram(src); err == nil {

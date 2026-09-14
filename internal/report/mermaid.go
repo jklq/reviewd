@@ -75,7 +75,11 @@ func ValidateSequenceDiagram(src string) error {
 	if strings.Contains(src, "%%{") {
 		return fmt.Errorf("sequence diagram must not contain Mermaid directives (%%%%{...}%%%%)")
 	}
-	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
+	// Normalize line endings the way Markdown renderers do, so validation
+	// sees the same lines GitHub will render. A lone \r would otherwise
+	// hide extra statements inside one validated line.
+	normalized := strings.ReplaceAll(src, "\r\n", "\n")
+	lines := strings.Split(strings.ReplaceAll(normalized, "\r", "\n"), "\n")
 	first := 0
 	for first < len(lines) && strings.TrimSpace(lines[first]) == "" {
 		first++
