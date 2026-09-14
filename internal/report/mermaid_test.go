@@ -49,6 +49,7 @@ func TestValidateSequenceDiagramAcceptsCanonicalSubset(t *testing.T) {
 		"sequenceDiagram\n A->>+B: Start\n deactivate B",
 		"sequenceDiagram\n A->>+A: Self\n A-->>-A: End",
 		"sequenceDiagram\n box Aqua Team\n participant A\n participant B\n destroy B\n end\n A->>B: Hi",
+		"sequenceDiagram\n create participant B\n A->>+B: Start\n deactivate B",
 	}
 	for i, src := range valid {
 		if err := ValidateSequenceDiagram(src); err != nil {
