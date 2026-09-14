@@ -103,10 +103,28 @@ func TestPlanEgressProxy(t *testing.T) {
 	if p.proxyArgv[0] != "run" || p.proxyArgv[1] != "-d" {
 		t.Fatalf("proxy not detached: %v", p.proxyArgv[:2])
 	}
-	for _, want := range []string{"--network-alias", "reviewd-egress", "reviewd.role=egress", "reviewd-egress-123456"} {
+	for _, want := range []string{"reviewd.role=egress", "reviewd-egress-123456"} {
 		if !slices.Contains(p.proxyArgv, want) {
 			t.Fatalf("missing proxy argv %s: %v", want, p.proxyArgv)
 		}
+	}
+	if slices.Contains(p.proxyArgv, "--network-alias") {
+		t.Fatalf("bridge network must skip alias: %v", p.proxyArgv)
+	}
+	custom := egressPlanRequest()
+	custom.egress.Network = "reviewd-upstream"
+	p, err = planDockerRun(custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"--network-alias", "reviewd-egress"} {
+		if !slices.Contains(p.proxyArgv, want) {
+			t.Fatalf("missing proxy argv %s: %v", want, p.proxyArgv)
+		}
+	}
+	p, err = planDockerRun(egressPlanRequest())
+	if err != nil {
+		t.Fatal(err)
 	}
 	network := ""
 	for i := 0; i+1 < len(p.proxyArgv); i++ {
