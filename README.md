@@ -7,8 +7,8 @@ containers, validates their findings, and posts a summary with inline comments
 and a 0–5 merge-confidence score. Includes SDK-backed providers for Codex, Claude Code, Muse and OpenCode, plus custom CLI harnesses.
 
 > [!CAUTION]
-> Custom command/image harnesses receive their own model-provider credentials. A malicious PR can use prompt injection to make a custom harness disclose those credentials. Prefer the official providers, which keep credentials outside the harness container. Alternatively, create your own provider plugin.
-
+> Custom command/image harnesses receive their own model-provider credentials. A malicious PR can use prompt injection to make a custom harness disclose those credentials. Prefer the official providers, which keep credentials outside the harness container. Alternatively, create [your own provider plugin](/docs/harnesses.md#independent-go-drivers).
+> 
 ## Install
 
 Requires Linux, Go 1.25+, Docker, and a GitHub App.
