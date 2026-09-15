@@ -4,5 +4,4 @@ reviewd-data
 credentials
 reviewd.json
 *.pem
-!/egress-ca-cert.pem
 .env

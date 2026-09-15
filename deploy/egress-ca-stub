@@ -1,1 +1,0 @@
-no egress CA baked into this image; pass --build-arg EGRESS_CA_FILE=<ca.pem> to trust one

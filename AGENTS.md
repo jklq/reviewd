@@ -4,8 +4,7 @@
   current service/config and `LOCAL.md` if present. Preserve the selected harness,
   model, credentials, repositories and tunnels unless asked to change them.
 - Check Linux, Go 1.25+, Docker access and the deployment user. Run `make build`;
-  build the chosen harness image (`make codex-image` for Codex) and `make egress-image`
-  when any harness sets `egress: true`.
+  build the chosen harness image (`make codex-image` for Codex).
 - For refreshing logins, define `credentials.NAME` with `state_file`, `command`
   and `exports`; reference `NAME` in each harness’s `credentials` array. Read
   `docs/configuration.md#shared-credential-refresh` for the command contract.

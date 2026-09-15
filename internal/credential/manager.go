@@ -54,7 +54,7 @@ func (m *Manager) Environment(ctx context.Context, names []string) (map[string]s
 		if m == nil {
 			return nil, errors.New("credential manager is not configured")
 		}
-		r, err := m.Resolve(ctx, name)
+		r, err := m.resolve(ctx, name)
 		if err != nil {
 			return nil, fmt.Errorf("credential %s: %w", name, err)
 		}
@@ -68,7 +68,7 @@ func (m *Manager) Environment(ctx context.Context, names []string) (map[string]s
 	return env, nil
 }
 
-func (m *Manager) Resolve(ctx context.Context, name string) (Result, error) {
+func (m *Manager) resolve(ctx context.Context, name string) (Result, error) {
 	var result Result
 	c, ok := m.Definitions[name]
 	if !ok {

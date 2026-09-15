@@ -13,7 +13,6 @@ import (
 	"reviewd/internal/github"
 	"reviewd/internal/report"
 	"reviewd/internal/review"
-	"reviewd/internal/sandbox"
 	"reviewd/internal/store"
 )
 
@@ -66,9 +65,6 @@ func (w Worker) process(ctx context.Context, j *store.Job) {
 		j.Error = err.Error()
 	default:
 		j.Error = err.Error()
-		if errors.Is(err, sandbox.ErrEgressLeak) {
-			j.Error = sandbox.ErrEgressLeak.Error()
-		}
 		j.Status = "failed"
 		if ctx.Err() != nil || j.Attempts < 3 {
 			j.Status = "queued"

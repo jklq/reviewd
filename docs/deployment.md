@@ -91,65 +91,6 @@ For Codex, keep the login at `/opt/reviewd/credentials/codex/auth.json` and poin
 
 Use numeric UID/GID that owns the deployment directory and socket's GID (`stat -c %g /var/run/docker.sock`). Run `docker compose up -d`. Keep the bind-published listener on loopback and use the same TLS proxy setup as native deployment.
 
-## Egress proxy deployment
-
-The [egress](configuration.md#egress-proxy-and-credential-isolation) feature keeps provider credentials out of harness containers. Each egress run creates one internal Docker network, starts a per-job proxy container on it, and only then starts the harness with sentinels instead of credentials. The proxy is dual-homed: it joins the job's internal network (where it answers as `reviewd-egress`) and the configured upstream `egress.network` (where it reaches providers). The harness has no route except through the proxy, and the daemon removes the harness container, proxy container, and internal network on every exit path; a restart also clears orphans via the owner labels.
-
-Generate a dedicated single-purpose CA for the proxy. The bundle holds the certificate and the private key the proxy needs to mint per-host certificates:
-
-```sh
-openssl req -x509 -newkey rsa:3072 -keyout egress-ca-key.pem -out egress-ca-cert.pem -days 825 -nodes -subj '/CN=reviewd-egress'
-cat egress-ca-cert.pem egress-ca-key.pem > egress-ca.pem
-install -m 0600 -o reviewd -g reviewd egress-ca.pem /etc/reviewd/egress-ca.pem
-```
-
-Protect this file like a credential: whoever holds the key can mint certificates your harnesses trust. Never reuse an organizational CA. Point `ca_file` at it and list provider hosts in the proxy `--allow` arguments. The bundle itself stays proxy-only: each run derives a certificate-only file from it into the run input, where the harness reads it at `/review/egress-ca.pem` for TLS verification, so the private key never enters a harness container.
-
-Build the proxy image on the Docker host:
-
-```sh
-make egress-image
-```
-
-To bake the CA into the shipped Codex harness image instead of trusting it at runtime, extract the certificate (never the private key) into the build context (`*.pem` is gitignored) and pass it as a build argument:
-
-```sh
-openssl x509 -in /etc/reviewd/egress-ca.pem -out ./egress-ca-cert.pem
-docker build --target codex --build-arg EGRESS_CA_FILE=./egress-ca-cert.pem -t reviewd-codex:local .
-rm ./egress-ca-cert.pem
-```
-
-The build installs only certificate blocks into the trust store, but pass a certificate-only file anyway: a bundle copied into the build context would linger in an image layer.
-
-Without the argument the image builds unchanged. Custom harness images can use the runtime equivalent from the configuration reference.
-
-The proxy owns OAuth refresh: when a credential nears expiry it re-runs `reviewd credential env` with the mounted config and credential state directories, so refresh commands execute inside the proxy container, not on the daemon host. Keep refresh commands dependency-free (`sh`, plus Python 3 which the image provides) or derive a custom proxy image that adds the needed CLIs:
-
-```dockerfile
-FROM reviewd-egress:local
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs && rm -rf /var/lib/apt/lists/*
-COPY provider-cli /usr/local/bin/provider-cli
-```
-
-Native service notes: keep `ca_file`, the config, and credential state under `/etc/reviewd` and `/var/lib/reviewd` where the unit already allows access, and ensure the service user can read the CA bundle. Compose notes: keep them under `${REVIEWD_ROOT}` so the deployment-directory mount covers them, and use host-absolute paths that are identical inside the server container, following the same rule as `data_dir` and `agent_binary`. The daemon bind-mounts the config file, the CA, and state directories into sibling proxy containers, so those paths must resolve on the Docker host.
-
-Verify after enabling `egress` on a harness:
-
-```sh
-./bin/reviewd config check --config /etc/reviewd/reviewd.json
-./bin/reviewd doctor --config /etc/reviewd/reviewd.json
-```
-
-`doctor` checks the proxy image, its HEALTHCHECK, the CA file, a `reviewd-*` upstream network, and credential resolution. Then trigger a test review and confirm the job succeeds, `harness.log` contains only `reviewd-sentinel-*` values, and no `reviewd-job-*` networks or `reviewd-egress-*` containers remain (`docker network ls`, `docker ps -a`). As a leak drill, submit a test PR whose diff instructs the harness to print its credential: the job must fail with `egress sentinel found in harness output; report withheld`, no review may be published, and the real credential must appear nowhere in the run directory, logs, or GitHub.
-
-Rollback is configuration-only: set `egress: false` (or remove the flag and restore the harness `network`), restart the daemon, and harnesses return to direct provider access with real credentials in their environment. Non-egress harnesses are behaviorally unchanged while others use the proxy.
-
-Harness compatibility notes from manual verification:
-
-- opencode works fully behind the proxy: it honors `HTTPS_PROXY` and `SSL_CERT_FILE`, so point `SSL_CERT_FILE` at `$REVIEWD_EGRESS_CA` in the harness command. Allow `opencode.ai` and `*.opencode.ai`; the wildcard covers the model registry at `models.opencode.ai`, which a fresh harness home must fetch before the provider key is ever used. Export the provider key as its own credential and write a minimal auth file around the sentinel as shown in [configuration](configuration.md#egress-proxy-and-credential-isolation).
-- Codex with a ChatGPT account does not work behind the proxy: the CLI verifies its identity token signature locally, so the harness would need the real identity token and isolation fails. Use API-key auth for egressed Codex (`OPENAI_API_KEY` swaps opaquely with no client-side validation) or keep ChatGPT-account Codex on direct networking. Egressed Codex also falls back from its websocket transport to HTTPS under interception (about 8 seconds of retries per run) and needs `chatgpt.com`, `*.oaiusercontent.com`, and `api.openai.com` allowlisted; point `CODEX_CA_CERTIFICATE` at `$REVIEWD_EGRESS_CA`.
-- Claude Code works with API-key auth: export the key, point `NODE_EXTRA_CA_CERTS` at `$REVIEWD_EGRESS_CA`, and allow the configured API host. Uppercase `HTTPS_PROXY` is honored.
-
 ## Observe and recover
 
 Jobs have states: `queued`, `running`, `done`, `failed`, `superseded`. CLI needs same config path and identity:
@@ -178,7 +119,7 @@ No automatic retention. Reclaim disk by removing `runs/JOB_ID` for terminal jobs
 
 Shared credentials are refreshed by trusted commands on the server. Containers receive only exported access credentials. Login state, refresh tokens, locks and caches stay outside review workspaces. Static `env` credentials remain supported.
 
-Each harness has: read-only image, no Linux capabilities, no privilege escalation, fixed PID/CPU/memory limits, bounded writable workspace and `/tmp`, read-only snapshots/context, and 8 MiB tmpfs output. No writable host paths exposed. After the harness exits, the reporting CLI exports its submitted JSON over stdout and the server validates and persists it. The model-provider credential is available to that harness by design, unless the harness uses the [egress proxy](configuration.md#egress-proxy-and-credential-isolation), in which case the harness holds only single-use sentinels and the proxy container alone holds the real credential.
+Each harness has: read-only image, no Linux capabilities, no privilege escalation, fixed PID/CPU/memory limits, bounded writable workspace and `/tmp`, read-only snapshots/context, and 8 MiB tmpfs output. No writable host paths exposed. After the harness exits, the reporting CLI exports its submitted JSON over stdout and the server validates and persists it. The model-provider credential is available to that harness by design.
 
 Processes run as the daemon's numeric UID/GID. Network `bridge` allows Internet access. Use dedicated host and restricted `reviewd-*` network where threat model requires.
 

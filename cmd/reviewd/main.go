@@ -42,7 +42,6 @@ const help = `reviewd — self-hosted code review with bring-your-own harnesses
   reviewd jobs show JOB_ID [--config ...]
   reviewd jobs retry JOB_ID [--config ...]
   reviewd jobs report JOB_ID [--config ...]
-  reviewd credential env [--config ...] NAME
   reviewd agent help
 
 Operator configuration is JSON. init writes defaults without overwriting files.
@@ -74,7 +73,7 @@ func run(args []string) error {
 	cmd := args[0]
 	args = args[1:]
 	sub := ""
-	if cmd == "config" || cmd == "jobs" || cmd == "credential" {
+	if cmd == "config" || cmd == "jobs" {
 		if len(args) == 0 {
 			return errors.New("subcommand required")
 		}
@@ -85,11 +84,6 @@ func run(args []string) error {
 	id := ""
 	if cmd == "jobs" && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		id = args[0]
-		args = args[1:]
-	}
-	name := ""
-	if cmd == "credential" && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		name = args[0]
 		args = args[1:]
 	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
@@ -120,8 +114,6 @@ func run(args []string) error {
 	if fs.NArg() > 0 {
 		if cmd == "jobs" && id == "" && fs.NArg() == 1 {
 			id = fs.Arg(0)
-		} else if cmd == "credential" && name == "" && fs.NArg() == 1 {
-			name = fs.Arg(0)
 		} else {
 			return errors.New("unexpected positional arguments")
 		}
@@ -144,32 +136,9 @@ func run(args []string) error {
 		return manualReview(c, *repo, *pr, *installation)
 	case "jobs":
 		return jobsCommand(c, sub, id)
-	case "credential":
-		return credentialCommand(c, sub, name)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
-}
-
-func credentialCommand(c config.Config, sub, name string) error {
-	if sub != "env" {
-		return errors.New("use credential env NAME")
-	}
-	if name == "" {
-		return errors.New("credential name is required")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	r, err := credential.New(c).Resolve(ctx, name)
-	if err != nil {
-		return fmt.Errorf("credential %s: %w", name, err)
-	}
-	b, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	_, err = os.Stdout.Write(append(b, '\n'))
-	return err
 }
 
 func initConfig(path string, parallel int, image, command, env string, appID int64) error {
@@ -250,31 +219,6 @@ func doctor(c config.Config) error {
 		}
 		if _, err := credentials.Environment(ctx, h.Credentials); err != nil {
 			return err
-		}
-	}
-	if c.Egress != nil {
-		if err := exec.CommandContext(ctx, "docker", "image", "inspect", c.Egress.Image).Run(); err != nil {
-			return fmt.Errorf("egress proxy image unavailable: %w", err)
-		}
-		out, err := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{json .Config.Healthcheck}}", c.Egress.Image).Output()
-		if err != nil {
-			return fmt.Errorf("egress proxy image unavailable: %w", err)
-		}
-		var healthcheck struct {
-			Test []string `json:"Test"`
-		}
-		if err := json.Unmarshal(out, &healthcheck); err != nil || len(healthcheck.Test) == 0 || (len(healthcheck.Test) == 1 && healthcheck.Test[0] == "NONE") {
-			return errors.New("egress proxy image has no healthcheck")
-		}
-		if _, hasKey, err := sandbox.SplitCABundle(c.Egress.CAFile); err != nil {
-			return fmt.Errorf("egress ca_file invalid: %w", err)
-		} else if !hasKey {
-			return fmt.Errorf("egress ca_file has no private key: %s", c.Egress.CAFile)
-		}
-		if strings.HasPrefix(c.Egress.Network, "reviewd-") {
-			if err := exec.CommandContext(ctx, "docker", "network", "inspect", c.Egress.Network).Run(); err != nil {
-				return fmt.Errorf("egress network %s unavailable: %w", c.Egress.Network, err)
-			}
 		}
 	}
 	if len(os.Getenv(c.WebhookSecretEnv)) < 16 {
@@ -383,7 +327,7 @@ func serve(c config.Config) error {
 		return err
 	}
 	owner := sha256.Sum256([]byte(c.DataDir))
-	runner := sandbox.Docker{Binary: binary, Memory: c.Memory, CPUs: c.CPUs, Owner: hex.EncodeToString(owner[:16]), Credentials: credential.New(c), Egress: c.Egress, ConfigFile: c.ConfigFile}
+	runner := sandbox.Docker{Binary: binary, Memory: c.Memory, CPUs: c.CPUs, Owner: hex.EncodeToString(owner[:16]), Credentials: credential.New(c)}
 	if err = runner.Cleanup(ctx); err != nil {
 		return err
 	}

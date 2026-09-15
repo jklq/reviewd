@@ -27,14 +27,6 @@ type Harness struct {
 	Env         []string `json:"env,omitempty"`   // Names explicitly forwarded from the operator environment.
 	Network     string   `json:"network"`
 	Credentials []string `json:"credentials,omitempty"`
-	Egress      bool     `json:"egress,omitempty"`
-}
-
-type Egress struct {
-	Image   string   `json:"image"`
-	Command []string `json:"command"`
-	Network string   `json:"network"`
-	CAFile  string   `json:"ca_file"`
 }
 
 // Credential commands are trusted operator programs. They update their durable
@@ -45,7 +37,6 @@ type Credential struct {
 	Env       []string `json:"env,omitempty"`
 	Exports   []string `json:"exports"`
 }
-
 // SizeTier routes PRs within its bounds to its own harness set. Zero bounds
 // are unlimited; empty Validator and Parallelism inherit the top-level values.
 type SizeTier struct {
@@ -109,8 +100,6 @@ type Config struct {
 	AppID                int64                 `json:"app_id"`
 	PrivateKeyFile       string                `json:"private_key_file"`
 	WebhookSecretEnv     string                `json:"webhook_secret_env"`
-	Egress               *Egress               `json:"egress,omitempty"`
-	ConfigFile           string                `json:"-"`
 	Harnesses            map[string]Harness    `json:"harnesses"`
 	Credentials          map[string]Credential `json:"credentials,omitempty"`
 	Reviewers            []string              `json:"reviewers"`
@@ -169,12 +158,6 @@ func Load(path string) (Config, error) {
 		}
 		c.Credentials[name] = credential
 	}
-	if c.Egress != nil && c.Egress.CAFile != "" && !filepath.IsAbs(c.Egress.CAFile) {
-		c.Egress.CAFile = filepath.Join(base, c.Egress.CAFile)
-	}
-	if abs, err := filepath.Abs(path); err == nil {
-		c.ConfigFile = abs
-	}
 	return c, c.Validate()
 }
 func Decode(b []byte, v any) error {
@@ -193,10 +176,6 @@ var name = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func AllowedEnv(env, webhookSecret string) bool {
 	return name.MatchString(env) && env != webhookSecret && !strings.HasPrefix(env, "GITHUB_") && !strings.HasPrefix(env, "REVIEWD_") && env != "HOME" && env != "PATH" && env != "DOCKER_HOST" && env != "DOCKER_CONTEXT"
-}
-
-func validNetwork(network string) bool {
-	return network == "bridge" || network == "none" || strings.HasPrefix(network, "reviewd-")
 }
 
 func (c Config) Validate() error {
@@ -303,14 +282,7 @@ func (c Config) Validate() error {
 		if err := report.ValidateAttribution("harness", n); err != nil {
 			return fmt.Errorf("%s: %w", n, err)
 		}
-		if h.Egress {
-			if h.Network != "" {
-				return fmt.Errorf("%s: network must be empty when egress is enabled", n)
-			}
-			if c.Egress == nil {
-				return fmt.Errorf("%s: egress requires the global egress block", n)
-			}
-		} else if !validNetwork(h.Network) {
+		if h.Network != "bridge" && h.Network != "none" && !strings.HasPrefix(h.Network, "reviewd-") {
 			return fmt.Errorf("%s: network must be bridge, none or reviewd-*", n)
 		}
 		// Usage is behavioral: a command must react to the prompt or the prompt
@@ -340,17 +312,6 @@ func (c Config) Validate() error {
 			if !AllowedEnv(env, c.WebhookSecretEnv) || exports[env] {
 				return fmt.Errorf("%s: forbidden environment name %q", n, env)
 			}
-		}
-	}
-	if c.Egress != nil {
-		if c.Egress.Image == "" || strings.HasPrefix(c.Egress.Image, "-") || len(c.Egress.Command) == 0 || c.Egress.Command[0] == "" {
-			return errors.New("invalid egress block: image and command are required")
-		}
-		if !validNetwork(c.Egress.Network) {
-			return errors.New("egress: network must be bridge, none or reviewd-*")
-		}
-		if c.Egress.CAFile == "" {
-			return errors.New("egress: ca_file is required")
 		}
 	}
 	return nil
