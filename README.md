@@ -7,7 +7,7 @@ containers, validates their findings, and posts a summary with inline comments
 and a 0–5 merge-confidence score. Configurable with Codex and most other CLI harnesses supporting headless mode.
 
 > [!CAUTION]
-> Currently, PR descriptions, diffs, fixtures, and candidate reports are untrusted input. A malicious PR can use prompt injection to make a harness disclose its own model-provider credential, which its container holds by design, or to place attacker-authored text in a review. 
+> PR descriptions, diffs, fixtures, and candidate reports are untrusted input. Currently, a malicious PR can use prompt injection to make a harness disclose its own model-provider credential, which its container holds by design. 
 
 ## Install
 
