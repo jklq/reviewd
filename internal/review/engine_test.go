@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -49,6 +50,156 @@ func (f *fakeRunner) Run(ctx context.Context, r sandbox.Request) (report.Report,
 	n := 4
 	return report.Report{Summary: "Change intent", Confidence: &n, Reasons: []string{"Live dependency not tested"}, SequenceDiagram: "sequenceDiagram\n A->>B: Change"}, nil
 }
+
+// scriptedRunner records every role/harness attempt and fails or degrades the
+// report for named pairs, so tests can stage provider outages.
+type scriptedRunner struct {
+	mu      sync.Mutex
+	calls   []string
+	fail    map[string]error
+	invalid map[string]bool
+}
+
+func (s *scriptedRunner) Run(_ context.Context, r sandbox.Request) (report.Report, error) {
+	key := r.Role + "/" + r.Harness.Model
+	s.mu.Lock()
+	s.calls = append(s.calls, key)
+	s.mu.Unlock()
+	if err := s.fail[key]; err != nil {
+		return report.Report{}, err
+	}
+	confidence := 4
+	result := report.Report{Summary: "Change intent", Confidence: &confidence, Reasons: []string{"Live dependency not tested"}, SequenceDiagram: "sequenceDiagram\n A->>B: Change"}
+	if !s.invalid[key] {
+		result.ImportantFiles = []report.File{{Path: "a.go", Description: "Changed file."}}
+	}
+	return result, nil
+}
+
+func (s *scriptedRunner) called() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string{}, s.calls...)
+}
+
+var changedFiles = []report.ChangedFile{{Filename: "a.go", Status: "modified", Patch: "@@ -1 +1 @@\n-old\n+new", Additions: 1, Deletions: 1}}
+
+// fallbackConfig selects codex with a "backup" harness as its fallback.
+func fallbackConfig(t *testing.T, parallelism int) config.Config {
+	t.Helper()
+	c := config.Default()
+	c.Parallelism = parallelism
+	backup := c.Harnesses["codex"]
+	backup.Model = "backup-model"
+	c.Harnesses["backup"] = backup
+	c.Fallbacks = map[string][]string{"codex": {"backup"}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestReviewerFallbackAfterHarnessFailure(t *testing.T) {
+	c := fallbackConfig(t, 1)
+	codex := "reviewer/" + c.Harnesses["codex"].Model
+	runner := &scriptedRunner{fail: map[string]error{codex: errors.New("provider unavailable")}}
+	dir := t.TempDir()
+	r, err := (Engine{c, runner}).Run(context.Background(), dir, Context{}, changedFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Harness != "backup" || r.Model != "backup-model" {
+		t.Fatalf("fallback attribution: %+v", r)
+	}
+	if got := runner.called(); !reflect.DeepEqual(got, []string{codex, "reviewer/backup-model"}) {
+		t.Fatalf("attempts: %v", got)
+	}
+	// Both attempts keep their inputs, so the failed provider's context remains.
+	for slot, want := range map[string]string{"reviewer-0": "codex", "reviewer-0-fallback-backup": "backup"} {
+		b, err := os.ReadFile(filepath.Join(dir, slot, "input", "context.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rc Context
+		if err = json.Unmarshal(b, &rc); err != nil {
+			t.Fatal(err)
+		}
+		if rc.Harness != want {
+			t.Fatalf("%s context harness: %+v", slot, rc)
+		}
+	}
+}
+
+func TestReviewerFallbackAfterInvalidReport(t *testing.T) {
+	c := fallbackConfig(t, 1)
+	codex := "reviewer/" + c.Harnesses["codex"].Model
+	runner := &scriptedRunner{invalid: map[string]bool{codex: true}}
+	r, err := (Engine{c, runner}).Run(context.Background(), t.TempDir(), Context{}, changedFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Harness != "backup" || !reflect.DeepEqual(runner.called(), []string{codex, "reviewer/backup-model"}) {
+		t.Fatalf("invalid report did not fall back: %+v %v", r, runner.called())
+	}
+}
+
+func TestFallbackExhaustionFailsSlot(t *testing.T) {
+	c := fallbackConfig(t, 2)
+	codex := "reviewer/" + c.Harnesses["codex"].Model
+	runner := &scriptedRunner{fail: map[string]error{codex: errors.New("provider unavailable"), "reviewer/backup-model": errors.New("backup unavailable")}}
+	_, err := (Engine{c, runner}).Run(context.Background(), t.TempDir(), Context{}, changedFiles)
+	if err == nil || !strings.Contains(err.Error(), "codex: provider unavailable") || !strings.Contains(err.Error(), "backup: backup unavailable") {
+		t.Fatalf("exhausted fallbacks not reported: %v", err)
+	}
+	// Both slots try codex first; goroutine scheduling makes only the counts
+	// deterministic.
+	got := runner.called()
+	codexAttempts, backupAttempts := 0, 0
+	for _, call := range got {
+		switch call {
+		case codex:
+			codexAttempts++
+		case "reviewer/backup-model":
+			backupAttempts++
+		default:
+			t.Fatalf("unexpected attempt %q in %v", call, got)
+		}
+	}
+	if len(got) != 4 || codexAttempts != 2 || backupAttempts != 2 {
+		t.Fatalf("exhausted attempts: %v", got)
+	}
+}
+
+func TestValidatorFallback(t *testing.T) {
+	c := fallbackConfig(t, 2)
+	codex := "validator/" + c.Harnesses["codex"].Model
+	runner := &scriptedRunner{fail: map[string]error{codex: errors.New("validator unavailable")}}
+	r, err := (Engine{c, runner}).Run(context.Background(), t.TempDir(), Context{}, changedFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Harness != "backup" || r.Model != "backup-model" {
+		t.Fatalf("validator fallback attribution: %+v", r)
+	}
+	if got := runner.called(); !reflect.DeepEqual(got, []string{"reviewer/" + c.Harnesses["codex"].Model, "reviewer/" + c.Harnesses["codex"].Model, codex, "validator/backup-model"}) {
+		t.Fatalf("validator attempts: %v", got)
+	}
+}
+
+func TestFallbackStopsWhenDeadlineExhausted(t *testing.T) {
+	c := fallbackConfig(t, 1)
+	codex := "reviewer/" + c.Harnesses["codex"].Model
+	runner := &scriptedRunner{fail: map[string]error{codex: errors.New("provider unavailable")}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := (Engine{c, runner}).Run(ctx, t.TempDir(), Context{}, changedFiles); err == nil || !strings.Contains(err.Error(), "provider unavailable") {
+		t.Fatalf("deadline error: %v", err)
+	}
+	if got := runner.called(); !reflect.DeepEqual(got, []string{codex}) {
+		t.Fatalf("fallback started after deadline: %v", got)
+	}
+}
+
 func TestParallelReviewThenValidator(t *testing.T) {
 	c := config.Default()
 	c.Parallelism = 3

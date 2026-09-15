@@ -4,7 +4,9 @@ package review
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -73,12 +75,7 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 		go func(i int) {
 			defer wg.Done()
 			name := sel.Reviewers[i%len(sel.Reviewers)]
-			candidates[i], errs[i] = eng.runOne(reviewCtx, dir, meta, files, "reviewer", i, name, nil)
-			if errs[i] != nil {
-				cancel()
-				return
-			}
-			errs[i] = diff.Validate(candidates[i])
+			candidates[i], errs[i] = eng.runSlot(reviewCtx, diff, dir, meta, files, "reviewer", i, name, nil)
 			if errs[i] != nil {
 				cancel()
 			}
@@ -98,7 +95,7 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 		result = candidates[0]
 	} else {
 		var err error
-		result, err = eng.runOne(ctx, dir, meta, files, "validator", 0, sel.Validator, candidates)
+		result, err = eng.runSlot(ctx, diff, dir, meta, files, "validator", 0, sel.Validator, candidates)
 		if err != nil {
 			return result, fmt.Errorf("validator: %w", err)
 		}
@@ -122,8 +119,42 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 	}
 	return result, nil
 }
-func (eng Engine) runOne(ctx context.Context, dir string, meta Context, files []report.ChangedFile, role string, index int, harness string, candidates []report.Report) (report.Report, error) {
-	work := filepath.Join(dir, fmt.Sprintf("%s-%d", role, index))
+
+// runSlot runs a reviewer or validator slot on its selected harness, then on
+// the configured fallbacks in order, until one returns a report valid for this
+// diff. Attempts share the job deadline; each keeps its own work directory so a
+// failed provider's inputs, log and output remain inspectable.
+func (eng Engine) runSlot(ctx context.Context, diff report.Diff, dir string, meta Context, files []report.ChangedFile, role string, index int, name string, candidates []report.Report) (report.Report, error) {
+	chain := eng.Config.Chain(name)
+	failures := make([]error, 0, len(chain))
+	for attempt, harness := range chain {
+		work := filepath.Join(dir, slotDir(role, index, harness, attempt))
+		result, err := eng.runOne(ctx, dir, work, meta, files, role, index, harness, candidates)
+		if err == nil {
+			err = diff.Validate(result)
+		}
+		if err == nil {
+			return result, nil
+		}
+		failures = append(failures, fmt.Errorf("%s: %w", harness, err))
+		if attempt+1 == len(chain) || ctx.Err() != nil {
+			break
+		}
+		slog.Warn("harness failed; trying fallback", "role", role, "index", index, "harness", harness, "fallback", chain[attempt+1], "error", err)
+	}
+	return report.Report{}, errors.Join(failures...)
+}
+
+// slotDir names one attempt's work directory. The primary attempt keeps the
+// historical <role>-<index> name; fallback attempts add their harness.
+func slotDir(role string, index int, harness string, attempt int) string {
+	if attempt == 0 {
+		return fmt.Sprintf("%s-%d", role, index)
+	}
+	return fmt.Sprintf("%s-%d-fallback-%s", role, index, harness)
+}
+
+func (eng Engine) runOne(ctx context.Context, dir, work string, meta Context, files []report.ChangedFile, role string, index int, harness string, candidates []report.Report) (report.Report, error) {
 	if err := os.RemoveAll(work); err != nil {
 		return report.Report{}, err
 	}
