@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reviewd/internal/report"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 func TestAgentSubmissionValidatesMetadataAndDiff(t *testing.T) {

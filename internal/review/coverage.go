@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/report"
 )
 
 // SnapshotCoverage only flags unavailable content touched by this PR. Merely

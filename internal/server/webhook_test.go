@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 func TestSignedWebhookDurableAndDeduplicated(t *testing.T) {

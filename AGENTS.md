@@ -13,13 +13,16 @@
   `REVIEWD_CREDENTIAL_MIN_VALIDITY`. It must save rotated state atomically before
   returning `{ "expires_at": "RFC3339", "env": { "NAME": "access-only value" } }`.
   Keep refresh tokens out of harness exports. reviewd handles locking and caching;
-  provider logic stays in config commands, with no provider-specific Go code.
+  provider logic stays in config commands or in provider helper executables they
+  invoke (such as `reviewd-credential-codex`), with no provider refresh code in
+  reviewd itself.
 - For Codex, reuse a saved server account login through `state_file`, or create a
-  dedicated file-based login in that directory as the service user. Install host
-  Codex CLI and Python 3 for the shipped refresh command. If login is needed, give
-  the user the URL/code from `codex login --device-auth`. Use a separate session
-  for interactive CLI use; do not let another process refresh copies of this token.
-  Keep credentials out of chat, logs and the repository.
+  dedicated file-based login in that directory as the service user. Install the
+  host Codex CLI; the shipped `reviewd-credential-codex` refresh helper rotates
+  the login through it. If login is needed, give the user the URL/code from
+  `codex login --device-auth`. Use a separate session for interactive CLI use; do
+  not let another process refresh copies of this token. Keep credentials out of
+  chat, logs and the repository.
 - Establish the public HTTPS endpoint. Give the user the exact webhook URL
   (`https://HOST/webhooks/github`). Specify Contents read, Pull requests and
   Issues read/write, Metadata read; subscribe to Pull request and Issue comment.

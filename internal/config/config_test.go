@@ -27,6 +27,8 @@ func TestTemplateUsageDetection(t *testing.T) {
 		c := Default()
 		h := c.Harnesses["codex"]
 		h.Command = command
+		h.Driver = ""
+		h.ReasoningEffort = ""
 		c.Harnesses["codex"] = h
 		return c
 	}

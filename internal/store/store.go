@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"reviewd/internal/github"
+	"github.com/jklq/reviewd/internal/github"
 )
 
 type Job struct {
