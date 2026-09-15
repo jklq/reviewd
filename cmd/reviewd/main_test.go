@@ -22,8 +22,23 @@ func TestInitUsesDefaultAndCustomHarnessConfiguration(t *testing.T) {
 	if !reflect.DeepEqual(c.Harnesses, defaults.Harnesses) {
 		t.Fatal("init changed the default harness")
 	}
+	if !reflect.DeepEqual(c.SizeTiers, defaults.SizeTiers) {
+		t.Fatal("init changed the default size tiers")
+	}
 	if err = run([]string{"init", "--config", path}); err == nil {
 		t.Fatal("overwrote existing configuration")
+	}
+	// The tiers inherit the requested parallelism instead of pinning their own.
+	scaled := filepath.Join(t.TempDir(), "reviewd.json")
+	if err = run([]string{"init", "--config", scaled, "--parallelism", "3"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err = config.Load(scaled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sel := c.Select(10, 1); sel.Tier != "small" || sel.Parallelism != 3 {
+		t.Fatalf("init --parallelism ignored by tier: %+v", sel)
 	}
 	custom := filepath.Join(t.TempDir(), "reviewd.json")
 	if err = run([]string{"init", "--config", custom, "--image", "custom:local", "--command", `["custom","{{.Prompt}}"]`, "--harness-env", "CUSTOM_AUTH"}); err != nil {
@@ -36,6 +51,10 @@ func TestInitUsesDefaultAndCustomHarnessConfiguration(t *testing.T) {
 	h := c.Harnesses[c.Reviewers[0]]
 	if h.Image != "custom:local" || !reflect.DeepEqual(h.Command, []string{"custom", "{{.Prompt}}"}) || !reflect.DeepEqual(h.Env, []string{"CUSTOM_AUTH"}) {
 		t.Fatal("custom harness not preserved")
+	}
+	// A custom command replaces the provider, so its tiers and variants are gone.
+	if len(c.Harnesses) != 1 || len(c.SizeTiers) != 0 {
+		t.Fatalf("custom init kept provider defaults: %d harnesses, %d tiers", len(c.Harnesses), len(c.SizeTiers))
 	}
 }
 

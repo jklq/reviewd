@@ -13,6 +13,26 @@
         "codex_account"
       ],
       "driver": "github.com/jklq/reviewd/harness/codex",
+      "reasoning_effort": "high"
+    },
+    "codex_xhigh": {
+      "image": "reviewd-codex:local",
+      "model": "gpt-5.6-luna",
+      "network": "bridge",
+      "credentials": [
+        "codex_account"
+      ],
+      "driver": "github.com/jklq/reviewd/harness/codex",
+      "reasoning_effort": "xhigh"
+    },
+    "codex_max": {
+      "image": "reviewd-codex:local",
+      "model": "gpt-5.6-luna",
+      "network": "bridge",
+      "credentials": [
+        "codex_account"
+      ],
+      "driver": "github.com/jklq/reviewd/harness/codex",
       "reasoning_effort": "max"
     }
   },
@@ -21,6 +41,31 @@
   ],
   "parallelism": 1,
   "validator": "codex",
+  "size_tiers": [
+    {
+      "name": "small",
+      "max_lines": 500,
+      "reviewers": [
+        "codex"
+      ],
+      "validator": "codex"
+    },
+    {
+      "name": "medium",
+      "max_lines": 2000,
+      "reviewers": [
+        "codex_xhigh"
+      ],
+      "validator": "codex_xhigh"
+    },
+    {
+      "name": "large",
+      "reviewers": [
+        "codex_max"
+      ],
+      "validator": "codex_max"
+    }
+  ],
   "workers": 2,
   "timeout": "45m",
   "memory": "2g",

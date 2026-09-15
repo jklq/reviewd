@@ -163,10 +163,13 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return c, err
 	}
-	// The file owns the harness set; JSON unmarshalling merges into maps, so
-	// clear the default entry to avoid resurrecting a harness the operator removed.
+	// The file owns these collections; decoding merges into maps and leaves
+	// omitted fields untouched, so clear the defaults to avoid resurrecting a
+	// harness the operator removed or tiers that reference it.
 	c.Harnesses = nil
 	c.Credentials = nil
+	c.SizeTiers = nil
+	c.Fallbacks = nil
 	if err = Decode(b, &c); err != nil {
 		return c, err
 	}
