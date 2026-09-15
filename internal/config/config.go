@@ -55,6 +55,17 @@ func (t SizeTier) label(i int) string {
 	return fmt.Sprintf("tier-%d", i+1)
 }
 
+// Chain returns the harnesses to try for a selected harness, in order: the
+// harness itself followed by its configured fallbacks. Only the selected
+// harness's list is followed, so mutual fallbacks cannot loop.
+func (c Config) Chain(name string) []string {
+	fallbacks := c.Fallbacks[name]
+	if len(fallbacks) == 0 {
+		return []string{name}
+	}
+	return append([]string{name}, fallbacks...)
+}
+
 // Selection is the effective reviewer set for one PR: either the first
 // matching size tier or, when none matches, the top-level defaults.
 type Selection struct {
@@ -105,6 +116,7 @@ type Config struct {
 	Reviewers            []string              `json:"reviewers"`
 	Parallelism          int                   `json:"parallelism"`
 	Validator            string                `json:"validator"`
+	Fallbacks            map[string][]string   `json:"fallbacks,omitempty"`
 	SizeTiers            []SizeTier            `json:"size_tiers,omitempty"`
 	Workers              int                   `json:"workers"`
 	Timeout              string                `json:"timeout"`
@@ -255,6 +267,24 @@ func (c Config) Validate() error {
 			if covers(c.SizeTiers[i].MaxLines, c.SizeTiers[j].MaxLines) && covers(c.SizeTiers[i].MaxFiles, c.SizeTiers[j].MaxFiles) {
 				return fmt.Errorf("size tier %q is unreachable: tier %q matches every PR it would match", c.SizeTiers[j].label(j), c.SizeTiers[i].label(i))
 			}
+		}
+	}
+	for primary, chain := range c.Fallbacks {
+		if _, ok := c.Harnesses[primary]; !ok {
+			return fmt.Errorf("fallbacks: unknown harness %q", primary)
+		}
+		if len(chain) == 0 {
+			return fmt.Errorf("fallbacks: %q: at least one fallback is required", primary)
+		}
+		seen := map[string]bool{primary: true}
+		for _, name := range chain {
+			if _, ok := c.Harnesses[name]; !ok {
+				return fmt.Errorf("fallbacks: %q: unknown harness %q", primary, name)
+			}
+			if seen[name] {
+				return fmt.Errorf("fallbacks: %q: duplicate fallback %q", primary, name)
+			}
+			seen[name] = true
 		}
 	}
 	for n, h := range c.Harnesses {

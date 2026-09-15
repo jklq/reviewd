@@ -166,6 +166,47 @@ func TestSizeTierValidation(t *testing.T) {
 	}
 }
 
+func TestFallbackConfiguration(t *testing.T) {
+	withChain := func(chain []string) Config {
+		c := Default()
+		c.Harnesses["backup"] = c.Harnesses["codex"]
+		c.Fallbacks = map[string][]string{"codex": chain}
+		return c
+	}
+	if err := withChain([]string{"backup"}).Validate(); err != nil {
+		t.Fatalf("valid fallback rejected: %v", err)
+	}
+	for _, fallbacks := range []map[string][]string{
+		{"missing": {"codex"}},
+		{"codex": {"missing"}},
+		{"codex": {}},
+		{"codex": {"codex"}},
+		{"codex": {"backup", "backup"}},
+	} {
+		c := Default()
+		c.Harnesses["backup"] = c.Harnesses["codex"]
+		c.Fallbacks = fallbacks
+		if c.Validate() == nil {
+			t.Fatalf("invalid fallbacks accepted: %+v", fallbacks)
+		}
+	}
+	c := withChain([]string{"backup"})
+	if got := c.Chain("codex"); !reflect.DeepEqual(got, []string{"codex", "backup"}) {
+		t.Fatalf("codex chain: %v", got)
+	}
+	if got := c.Chain("backup"); !reflect.DeepEqual(got, []string{"backup"}) {
+		t.Fatalf("backup chain: %v", got)
+	}
+	path := filepath.Join(t.TempDir(), "reviewd.json")
+	body := `{"harnesses":{"codex":{"image":"codex","command":["agent","{{.Prompt}}"],"network":"none"},"backup":{"image":"backup","command":["agent","{{.Prompt}}"],"network":"none"}},"reviewers":["codex"],"validator":"codex","fallbacks":{"codex":["backup"]}}`
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err := Load(path); err != nil || !reflect.DeepEqual(loaded.Chain("codex"), []string{"codex", "backup"}) {
+		t.Fatalf("loaded fallbacks: %v %+v", err, loaded.Fallbacks)
+	}
+}
+
 func TestStrictDecode(t *testing.T) {
 	for _, s := range []string{`{"unknown":true}`, `{} {}`} {
 		var c Config

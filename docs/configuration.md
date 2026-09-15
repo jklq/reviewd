@@ -15,6 +15,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `reviewers` | `["codex"]` | Round-robin harness selection |
 | `parallelism` | `1` | 1–16 concurrent reviewers per PR |
 | `validator` | `codex` | Final independent pass harness (unused when `parallelism` is 1) |
+| `fallbacks` | none | Ordered backup harnesses per primary harness |
 | `size_tiers` | none | Optional PR-size routing to harness sets |
 | `workers` | `2` | 1–32 simultaneously active PR jobs |
 | `timeout` | `45m` | Whole job deadline, all stages (1s–2h) |
@@ -25,11 +26,40 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `policy` | empty | Trusted review policy text |
 | `allow_forks` | `false` | Review fork PRs |
 
-Maximum **concurrent** reviewer containers = `workers × parallelism`. Validation uses one container per job, except parallelism 1 runs its single reviewer as the final pass with no separate validator. Defaults run two PR jobs at a time, each a single reviewer pass. Independent reviews of the same PR are serialized. Each attempt can invoke `parallelism + 1` harnesses (one total when `parallelism` is 1). Retries multiply model usage.
+Maximum **concurrent** reviewer containers = `workers × parallelism`. Validation uses one container per job, except parallelism 1 runs its single reviewer as the final pass with no separate validator. Defaults run two PR jobs at a time, each a single reviewer pass. Independent reviews of the same PR are serialized. Each attempt can invoke `parallelism + 1` harnesses (one total when `parallelism` is 1). Retries and configured [fallbacks](#harness-fallbacks) multiply model usage.
 
 Harness `env` lists variable **names**, not values. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
 
 Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex harness pins `gpt-5.6-luna` and `model_reasoning_effort="max"` in its command so reviews are reproducible rather than following ambient defaults.
+
+## Harness fallbacks
+
+`fallbacks` maps a harness to the ordered backups reviewd tries when it fails to
+produce a review:
+
+```json
+{
+  "reviewers": ["codex"],
+  "validator": "codex",
+  "fallbacks": {"codex": ["claude", "muse"]}
+}
+```
+
+The harness selected for a reviewer or validator slot runs first. When it exits
+nonzero, does not export a valid report, fails to pass its credentials, or
+returns a report that does not match the diff, the next fallback for that
+harness runs, and so on until one succeeds or the list is exhausted. Fallbacks
+apply wherever the harness is selected, including by a size tier; the same list
+serves every reviewer slot and the validator. Each attempt keeps its own
+directory under the job's run directory, such as
+`reviewer-1-fallback-claude/output/harness.log`, so the failed harness's inputs,
+log and report remain inspectable.
+
+The list is flat: only the selected harness's fallbacks are followed, so two
+harnesses may safely name each other. Attempts share the job `timeout`, and no
+further fallback starts once it expires. If every attempt fails, the job fails
+recording each attempt's error. `config check` rejects unknown harnesses, empty
+lists, duplicates and a fallback naming its own primary.
 
 ## PR-size harness tiers
 
