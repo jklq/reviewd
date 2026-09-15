@@ -83,6 +83,7 @@ JSON
  reviewd agent submit
  `
 	c := config.Default()
+	c.SizeTiers = nil
 	c.Parallelism = 3
 	t.Setenv("HARNESS_AUTH", "stale-inherited-value")
 	t.Setenv("REVIEWD_WEBHOOK_SECRET", "server-only-secret")

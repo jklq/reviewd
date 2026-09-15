@@ -16,7 +16,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `parallelism` | `1` | 1–16 concurrent reviewers per PR |
 | `validator` | `codex` | Final independent pass harness (unused when `parallelism` is 1) |
 | `fallbacks` | none | Ordered backup harnesses per primary harness |
-| `size_tiers` | none | Optional PR-size routing to harness sets |
+| `size_tiers` | Codex high ≤500 lines, xhigh ≤2000, max above | Optional PR-size routing to harness sets |
 | `workers` | `2` | 1–32 simultaneously active PR jobs |
 | `timeout` | `45m` | Whole job deadline, all stages (1s–2h) |
 | `memory` | `2g` | Per-container memory limit (integer `m` or `g`) |
@@ -30,7 +30,7 @@ Maximum **concurrent** reviewer containers = `workers × parallelism`. Validatio
 
 Harness `env` lists variable **names**, not values. For a provider driver these values stay on the server; for custom command harnesses they are forwarded to the container. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
 
-Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex provider pins `gpt-5.6-luna` and `reasoning_effort: "max"` through its SDK so reviews are reproducible rather than following ambient defaults. A Codex `service_tier` optionally requests a catalog tier such as `fast`; the driver rejects it elsewhere.
+Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex provider pins `gpt-5.6-luna` through its SDK so reviews are reproducible rather than following ambient defaults; the default `size_tiers` run it at `reasoning_effort` `high`, `xhigh` and `max` for small, medium and large PRs. A Codex `service_tier` optionally requests a catalog tier such as `fast`; the driver rejects it elsewhere.
 
 ## Harness fallbacks
 

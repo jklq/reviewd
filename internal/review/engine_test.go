@@ -88,6 +88,7 @@ var changedFiles = []report.ChangedFile{{Filename: "a.go", Status: "modified", P
 func fallbackConfig(t *testing.T, parallelism int) config.Config {
 	t.Helper()
 	c := config.Default()
+	c.SizeTiers = nil // exercise top-level reviewer/validator/parallelism selection
 	c.Parallelism = parallelism
 	backup := c.Harnesses["codex"]
 	backup.Model = "backup-model"
@@ -202,6 +203,7 @@ func TestFallbackStopsWhenDeadlineExhausted(t *testing.T) {
 
 func TestParallelReviewThenValidator(t *testing.T) {
 	c := config.Default()
+	c.SizeTiers = nil
 	c.Parallelism = 3
 	runner := &fakeRunner{}
 	engine := Engine{c, runner}

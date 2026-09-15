@@ -124,6 +124,7 @@ func setupWorker(t *testing.T) (Worker, *store.Job, *githubFixture, *workerRunne
 	}
 	c := config.Default()
 	c.DataDir = s.Dir
+	c.SizeTiers = nil
 	c.Parallelism = 2
 	runner := &workerRunner{}
 	return Worker{Config: c, Store: s, App: app, Engine: review.Engine{Config: c, Runner: runner}}, &j, fixture, runner
