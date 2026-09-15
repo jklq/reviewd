@@ -1,6 +1,4 @@
-// Package credential refreshes a Codex ChatGPT account login for reviewd's
-// shared credential contract. It is the Codex provider's reference refresh
-// implementation and is deliberately not imported by the reviewd binary.
+// Package credential refreshes a Codex ChatGPT account login.
 package credential
 
 import (
@@ -18,14 +16,9 @@ import (
 	"time"
 )
 
-// slack renews slightly before the required remaining validity, so a token
-// cannot expire between refresh and the model call it was prepared for.
+// slack renews slightly before the required remaining validity.
 const slack = time.Minute
 
-// Refresh returns access-only login JSON for stateFile and the access token's
-// expiry. When less than minValidity plus slack remains, it asks the installed
-// Codex CLI to rotate the login through its app server, which persists the
-// rotated refresh token in the state file.
 func Refresh(ctx context.Context, stateFile string, minValidity time.Duration) ([]byte, time.Time, error) {
 	if filepath.Base(stateFile) != "auth.json" {
 		return nil, time.Time{}, errors.New("codex login state file must be named auth.json")
@@ -61,8 +54,6 @@ func Refresh(ctx context.Context, stateFile string, minValidity time.Duration) (
 	return b, expires.UTC(), nil
 }
 
-// readLogin returns the raw login, its tokens, and its access token. Unknown
-// fields are preserved so exports stay faithful to the provider's format.
 func readLogin(path string) (map[string]any, map[string]any, string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -86,8 +77,6 @@ func readLogin(path string) (map[string]any, map[string]any, string, error) {
 	return auth, tokens, access, nil
 }
 
-// expiry reads the standard JWT exp claim without verifying the signature.
-// The access token is opaque to reviewd; only its documented shape is used.
 func expiry(access string) (time.Time, error) {
 	parts := strings.Split(access, ".")
 	if len(parts) != 3 {
@@ -106,8 +95,6 @@ func expiry(access string) (time.Time, error) {
 	return time.Unix(claims.Exp, 0), nil
 }
 
-// rotate runs one JSON-RPC exchange with the Codex app server. The server owns
-// the refresh protocol and writes the rotated login beside CODEX_HOME.
 func rotate(ctx context.Context, dir string) error {
 	cmd := exec.CommandContext(ctx, "codex",
 		"-c", `cli_auth_credentials_store="file"`,
@@ -167,7 +154,6 @@ func rotate(ctx context.Context, dir string) error {
 	return nil
 }
 
-// response reads until the reply with id arrives, skipping notifications.
 func response(decoder *json.Decoder, id int) (map[string]any, error) {
 	for {
 		var message struct {

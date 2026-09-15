@@ -55,7 +55,6 @@ func TestRefreshProjectsValidLoginWithoutRotation(t *testing.T) {
 	if tokens["refresh_token"] != "" || tokens["access_token"] == "" || tokens["account_id"] != "account" {
 		t.Fatalf("bad export: %v", tokens)
 	}
-	// The state file keeps the refresh token; only the export is access-only.
 	onDisk, err := os.ReadFile(state)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +102,6 @@ func TestRefreshRejectsUnsupportedState(t *testing.T) {
 	}
 }
 
-// fakeCodex installs a `codex` executable that acts as the test process itself.
 func fakeCodex(t *testing.T) {
 	t.Helper()
 	binary, err := os.Executable()

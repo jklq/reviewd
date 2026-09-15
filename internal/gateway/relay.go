@@ -10,8 +10,7 @@ import (
 	"time"
 )
 
-// Relay runs INSIDE the container. It holds no credentials and cannot select
-// an upstream: the host gateway owns the only routing/authentication policy.
+// Relay runs inside the container and cannot select an upstream.
 func Relay() error {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", "/run/reviewd-model/model.sock")

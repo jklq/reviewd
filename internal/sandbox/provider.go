@@ -48,8 +48,6 @@ func (d Docker) prepareProvider(ctx context.Context, r Request) (preparedProvide
 	if err != nil {
 		return p, noop, err
 	}
-	// The sibling directory is never mounted as input or output. Only its socket
-	// directory is mounted, read-only, at a fixed path inside this one container.
 	dir, err := os.MkdirTemp(filepath.Dir(r.Input), ".model-")
 	if err != nil {
 		return p, noop, err
@@ -70,7 +68,6 @@ func (d Docker) prepareProvider(ctx context.Context, r Request) (preparedProvide
 	for _, name := range names {
 		p.dockerArgs = append(p.dockerArgs, "--env", name+"="+launch.Environment[name])
 	}
-	// No original credential names or values can reach Docker's environment.
 	p.harness.Env = nil
 	p.harness.Credentials = nil
 	// Write only the public SDK script, not the route table or credential map.
@@ -82,7 +79,7 @@ func (d Docker) prepareProvider(ctx context.Context, r Request) (preparedProvide
 	return p, close, nil
 }
 
-// Wait for the credential-free in-container relay before starting an SDK.
+// sdkReady waits for the credential-free in-container relay.
 const sdkReady = `for (let attempt = 0; ; attempt++) {
   try {
     const response = await fetch('http://127.0.0.1:39123/ready', { signal: AbortSignal.timeout(1000) });

@@ -1,6 +1,4 @@
-// Command reviewd-credential-codex refreshes the Codex ChatGPT account login
-// configured as a reviewd credential. It implements the shared refresh command
-// contract documented in docs/configuration.md.
+// Command reviewd-credential-codex refreshes the Codex ChatGPT account login.
 package main
 
 import (

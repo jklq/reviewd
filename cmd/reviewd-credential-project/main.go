@@ -1,6 +1,4 @@
-// Command reviewd-credential-project exports a provider CLI's JSON login state
-// as a reviewd credential. It performs no network requests and never rotates
-// the login; the provider CLI owns login and its own refresh behavior.
+// Command reviewd-credential-project exports a provider CLI's JSON login state.
 package main
 
 import (
@@ -12,9 +10,7 @@ import (
 	"time"
 )
 
-// projection credits long validity to state that does not rotate; reviewd
-// invalidates its cache whenever the state file changes, so a shorter horizon
-// would only cause repeated reads, not refreshed logins.
+// projection credits long validity to state that does not rotate.
 const validity = 10 * 365 * 24 * time.Hour
 
 func main() {

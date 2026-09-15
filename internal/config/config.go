@@ -39,7 +39,6 @@ func (h Harness) DriverOptions() harness.Options {
 	return harness.Options{Model: h.Model, ReasoningEffort: h.ReasoningEffort}
 }
 
-// LookupDriver resolves a linked package or an operator-installed RPC plugin.
 func (h Harness) LookupDriver() (harness.Driver, error) {
 	if h.Plugin != "" {
 		return harnessplugin.Open(h.Driver, h.Plugin)

@@ -1,7 +1,4 @@
 // Package opencode provides the official reviewd driver for the OpenCode SDK.
-// It routes OpenAI-compatible chat completions to fixed OpenCode Zen endpoints:
-// the pay-as-you-go API (bare or opencode/ model) or the Go subscription
-// (opencode-go/ model).
 package opencode
 
 import (
@@ -34,7 +31,6 @@ func (d Driver) Prepare(o harness.Options, values map[string]string) (harness.La
 	if err != nil {
 		return harness.Launch{}, err
 	}
-	// The endpoint expects the bare model ID; the provider prefix selects it.
 	o.Model = model
 	return harness.Launch{Script: script, Environment: harness.SDKEnvironment(o), Routes: []harness.Route{
 		{Path: "/v1/chat/completions", ForwardHeaders: []string{"User-Agent", "X-Session-Id", "X-Session-Affinity"}, URL: upstream + "/chat/completions", Headers: http.Header{"Authorization": {"Bearer " + key}}},
@@ -52,8 +48,6 @@ var endpoints = map[string]string{
 	goProvider:  "https://opencode.ai/zen/go/v1",
 }
 
-// splitModel uses OpenCode's provider/model convention. A bare model selects
-// Zen, preserving bare Zen model IDs in existing configuration.
 func splitModel(model string) (string, string) {
 	provider, id, ok := strings.Cut(model, "/")
 	if !ok {
@@ -62,8 +56,6 @@ func splitModel(model string) (string, string) {
 	return provider, id
 }
 
-// credential returns the selected provider's API key from either a projected
-// OpenCode auth.json or the service environment.
 func credential(provider string, values map[string]string) (string, error) {
 	raw := values["OPENCODE_AUTH_JSON"]
 	if raw == "" {
@@ -83,8 +75,6 @@ func credential(provider string, values map[string]string) (string, error) {
 	if !ok || entry.Key == "" {
 		return "", fmt.Errorf("OPENCODE_AUTH_JSON has no %s credential", provider)
 	}
-	// The CLI stores key logins as type "api"; OAuth logins carry refreshable
-	// tokens and would need a refresh helper before this driver can use them.
 	if entry.Type != "api" {
 		return "", fmt.Errorf("%s login type %q is not supported; sign in with an API key", provider, entry.Type)
 	}

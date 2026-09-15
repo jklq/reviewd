@@ -65,7 +65,6 @@ func TestOpenCodeCredentialModes(t *testing.T) {
 	if strings.Contains(string(public), secret) {
 		t.Fatal("credential leaked into launch")
 	}
-	// A bare or opencode/ model still selects the Zen endpoint and bare ID.
 	for _, model := range []string{"deepseek-v4.1-flash", "opencode/deepseek-v4.1-flash"} {
 		launch, err = d.Prepare(harness.Options{Model: model}, map[string]string{"OPENCODE_AUTH_JSON": auth})
 		if err != nil {
@@ -75,7 +74,6 @@ func TestOpenCodeCredentialModes(t *testing.T) {
 			t.Fatalf("wrong Zen route for %q", model)
 		}
 	}
-	// Static keys remain supported, and selecting both credentials is an error.
 	if _, err = d.Prepare(harness.Options{Model: "deepseek-v4.1-flash"}, map[string]string{"OPENCODE_API_KEY": secret}); err != nil {
 		t.Fatal(err)
 	}

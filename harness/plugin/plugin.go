@@ -1,5 +1,5 @@
-// Package plugin exposes harness drivers through HashiCorp go-plugin's local
-// net/rpc transport. Plugin executables are trusted operator code, not sandboxes.
+// Package plugin exposes harness drivers through HashiCorp go-plugin; plugin
+// executables are trusted operator code, not sandboxes.
 package plugin
 
 import (
@@ -25,8 +25,8 @@ func (*driverPlugin) Client(_ *goplugin.MuxBroker, c *rpc.Client) (interface{}, 
 	return &client{rpc: c}, nil
 }
 
-// PrepareArgs is the version-1 wire request. Credentials stay on the server side
-// of the Docker boundary and must never appear in plugin logs or launch fields.
+// PrepareArgs is the version-1 wire request. Credentials must never appear in
+// plugin logs or launch fields.
 type PrepareArgs struct {
 	Options     harness.Options
 	Credentials map[string]string
@@ -76,8 +76,6 @@ var processes = struct {
 	drivers map[string]*client
 }{drivers: make(map[string]*client)}
 
-// Open starts (or reuses) the executable and dispenses the driver keyed by its
-// package path. No downloads, builds, shell expansion, or repository discovery.
 func Open(name, path string) (harness.Driver, error) {
 	if name == "" || !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("plugin requires a driver name and absolute executable path")
@@ -117,7 +115,6 @@ func Open(name, path string) (harness.Driver, error) {
 	return c, nil
 }
 
-// Close stops all plugin processes. The application calls this on every exit.
 func Close() {
 	processes.Lock()
 	defer processes.Unlock()

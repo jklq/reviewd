@@ -18,15 +18,14 @@ import (
 	"github.com/jklq/reviewd/harness"
 )
 
-// Start exposes only a private Unix socket. The directory must be outside all
-// review inputs/outputs, at the same host path when using Docker Compose.
+// Start exposes only a private Unix socket.
 func Start(ctx context.Context, dir string, routes []harness.Route) (func(), error) {
 	handler, err := NewHandler(routes)
 	if err != nil {
 		return nil, err
 	}
-	// Bind through a directory descriptor so long data paths do not exceed
-	// Linux's 108-byte Unix-socket address limit. Docker uses the short mount path.
+	// Bind through a directory descriptor: long data paths exceed the 108-byte
+	// Unix-socket address limit.
 	directory, err := os.Open(dir)
 	if err != nil {
 		return nil, err
@@ -56,8 +55,7 @@ type Handler struct {
 	slots     chan struct{}
 }
 
-// NewHandler validates the trusted routing table. No forwarding proxy, arbitrary
-// URL, redirect, incoming authentication header, or query is ever forwarded.
+// NewHandler validates the trusted routing table.
 func NewHandler(routes []harness.Route) (*Handler, error) {
 	h := &Handler{slots: make(chan struct{}, 4), routes: map[string]harness.Route{}, transport: &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 15 * time.Second}).DialContext, TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 2 * time.Minute, DisableCompression: true, MaxConnsPerHost: 8}}
 	if len(routes) == 0 {
@@ -103,8 +101,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "model route denied", http.StatusForbidden)
 		return
 	}
-	// Bound input before contacting the upstream. Do not forward client headers:
-	// even Connection-nominated or proxy headers must not influence authentication.
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<20))
 	if err != nil {
 		http.Error(w, "model request too large", http.StatusRequestEntityTooLarge)
@@ -119,8 +115,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if route.Headers != nil {
 		request.Header = route.Headers.Clone()
 	}
-	// Protocol metadata only. Never copy caller authentication, routing, cookies,
-	// proxy headers, content encoding, or Connection-nominated headers.
 	for _, name := range route.ForwardHeaders {
 		if value := r.Header.Get(name); value != "" {
 			request.Header.Set(name, value)
@@ -134,7 +128,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer response.Body.Close()
-	// Errors can echo authorization; never expose their body, headers or location.
+	// Errors can echo authorization; never expose upstream bodies or headers.
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		status := response.StatusCode
 		if status < 400 || status > 599 {
@@ -150,8 +144,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(response.StatusCode)
-	// Streaming is essential for SDKs. Only the model payload crosses the boundary;
-	// authentication, cookies, redirects and diagnostic headers never do.
 	buffer := make([]byte, 32<<10)
 	reader := io.LimitReader(response.Body, 128<<20)
 	for {

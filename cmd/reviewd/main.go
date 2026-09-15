@@ -155,8 +155,7 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 		if err := json.Unmarshal([]byte(command), &h.Command); err != nil {
 			return err
 		}
-		// A custom command owns its model selection; do not attribute the
-		// default Codex model to it.
+		// A custom command owns its model selection.
 		h.Model = ""
 		h.Driver = ""
 		h.Plugin = ""
@@ -168,8 +167,6 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 		h.Credentials = nil
 	}
 	c.Harnesses[name] = h
-	// Shipped refresh helpers are built beside reviewd; prefer their absolute
-	// path so the generated credentials do not depend on the service PATH.
 	if executable, err := os.Executable(); err == nil {
 		for key, credential := range c.Credentials {
 			credential.Command = resolveHelper(filepath.Dir(executable), credential.Command)
@@ -199,8 +196,6 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 	return nil
 }
 
-// resolveHelper expands a bare command name to a helper executable built beside
-// reviewd, when one exists, and leaves PATH lookups and explicit paths alone.
 func resolveHelper(dir string, command []string) []string {
 	if len(command) == 0 || strings.ContainsRune(command[0], filepath.Separator) {
 		return command

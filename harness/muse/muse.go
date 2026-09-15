@@ -35,10 +35,7 @@ func (d Driver) Prepare(o harness.Options, values map[string]string) (harness.La
 	}}, nil
 }
 
-// credential returns the account key minted by `muse login`, from either the
-// projected auth.json or a static environment API key. The login file's account
-// key authenticates model calls; its OAuth access token targets the launcher
-// surface and is not used here.
+// credential returns the account key minted by `muse login`, not its OAuth access token.
 func credential(values map[string]string) (string, error) {
 	raw := values["MUSE_AUTH_JSON"]
 	if raw == "" {

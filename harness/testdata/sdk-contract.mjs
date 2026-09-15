@@ -1,11 +1,8 @@
-// Offline contract check using the real SDK/runtime. No provider credentials or
-// Internet access. Reaching the expected model route is the success condition.
+// Offline contract check using the real SDK/runtime.
 import http from 'node:http';
 import fs from 'node:fs';
 fs.mkdirSync('/review', { recursive: true });
 fs.writeFileSync('/review/prompt.md', 'Reply only with reviewd-sdk-contract.');
-// Muse loads a catalog before creating sessions. This is a local cache fixture,
-// not an upstream catalog-response fixture; the gateway passes real catalogs on.
 const model = process.env.REVIEWD_MODEL;
 fs.mkdirSync(process.env.HOME + '/.local/share/muse/model-catalog', { recursive: true });
 fs.writeFileSync(process.env.HOME + '/.local/share/muse/model-catalog/6d657461__p746268.json', JSON.stringify({
@@ -34,8 +31,7 @@ const server = http.createServer((request, response) => {
   request.on('end', () => {
     if (!body.includes('reviewd-sdk-contract')) { console.error('SDK omitted prompt'); process.exit(1); }
     console.log('SDK model route verified:', request.method, request.url);
-    // Exit before returning a model result: this test verifies transport wiring,
-    // not paid model behavior. Docker --init cleans up SDK child processes.
+    // Exit before returning a model result: this verifies transport wiring only.
     process.exit(0);
   });
 });
