@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/github"
-	"reviewd/internal/report"
-	"reviewd/internal/review"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/github"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/review"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 type Worker struct {

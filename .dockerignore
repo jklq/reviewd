@@ -1,5 +1,6 @@
 .git
-bin
+bin/*
+!bin/muse
 reviewd-data
 credentials
 reviewd.json

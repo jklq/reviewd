@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"reviewd/internal/github"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/github"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 type Webhook struct {

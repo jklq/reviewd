@@ -17,16 +17,34 @@ import (
 	"text/template"
 	"time"
 
-	"reviewd/internal/report"
+	"github.com/jklq/reviewd/harness"
+	harnessplugin "github.com/jklq/reviewd/harness/plugin"
+	_ "github.com/jklq/reviewd/internal/providers"
+	"github.com/jklq/reviewd/internal/report"
 )
 
 type Harness struct {
-	Image       string   `json:"image"`
-	Command     []string `json:"command"`
-	Model       string   `json:"model,omitempty"` // Declared model, recorded in reviews when the agent does not report one.
-	Env         []string `json:"env,omitempty"`   // Names explicitly forwarded from the operator environment.
-	Network     string   `json:"network"`
-	Credentials []string `json:"credentials,omitempty"`
+	Driver          string   `json:"driver,omitempty"`
+	Plugin          string   `json:"plugin,omitempty"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+	Image           string   `json:"image"`
+	Command         []string `json:"command"`
+	Model           string   `json:"model,omitempty"` // Declared model, recorded in reviews when the agent does not report one.
+	Env             []string `json:"env,omitempty"`   // Names explicitly forwarded from the operator environment.
+	Network         string   `json:"network"`
+	Credentials     []string `json:"credentials,omitempty"`
+}
+
+func (h Harness) DriverOptions() harness.Options {
+	return harness.Options{Model: h.Model, ReasoningEffort: h.ReasoningEffort}
+}
+
+// LookupDriver resolves a linked package or an operator-installed RPC plugin.
+func (h Harness) LookupDriver() (harness.Driver, error) {
+	if h.Plugin != "" {
+		return harnessplugin.Open(h.Driver, h.Plugin)
+	}
+	return harness.Lookup(h.Driver)
 }
 
 // Credential commands are trusted operator programs. They update their durable
@@ -37,6 +55,7 @@ type Credential struct {
 	Env       []string `json:"env,omitempty"`
 	Exports   []string `json:"exports"`
 }
+
 // SizeTier routes PRs within its bounds to its own harness set. Zero bounds
 // are unlimited; empty Validator and Parallelism inherit the top-level values.
 type SizeTier struct {
@@ -158,6 +177,18 @@ func Load(path string) (Config, error) {
 		}
 		c.Credentials[name] = credential
 	}
+	for name, h := range c.Harnesses {
+		if h.Plugin != "" {
+			if h.Driver == "" {
+				return c, fmt.Errorf("%s: plugin requires driver", name)
+			}
+			if !filepath.IsAbs(h.Plugin) {
+				h.Plugin = filepath.Join(base, h.Plugin)
+			}
+
+			c.Harnesses[name] = h
+		}
+	}
 	return c, c.Validate()
 }
 func Decode(b []byte, v any) error {
@@ -271,7 +302,7 @@ func (c Config) Validate() error {
 				exports[env] = true
 			}
 		}
-		if !name.MatchString(n) || h.Image == "" || strings.HasPrefix(h.Image, "-") || len(h.Command) == 0 || h.Command[0] == "" {
+		if !name.MatchString(n) || h.Image == "" || strings.HasPrefix(h.Image, "-") || (h.Driver == "" && (len(h.Command) == 0 || h.Command[0] == "")) {
 			return fmt.Errorf("invalid harness %q", n)
 		}
 		if err := report.ValidateAttribution("model", h.Model); err != nil {
@@ -284,6 +315,28 @@ func (c Config) Validate() error {
 		}
 		if h.Network != "bridge" && h.Network != "none" && !strings.HasPrefix(h.Network, "reviewd-") {
 			return fmt.Errorf("%s: network must be bridge, none or reviewd-*", n)
+		}
+		for _, env := range h.Env {
+			if !AllowedEnv(env, c.WebhookSecretEnv) || exports[env] {
+				return fmt.Errorf("%s: forbidden environment name %q", n, env)
+			}
+			exports[env] = true
+		}
+		if h.Driver != "" {
+			if len(h.Command) != 0 {
+				return fmt.Errorf("%s: driver and command are mutually exclusive", n)
+			}
+			d, err := h.LookupDriver()
+			if err != nil {
+				return err
+			}
+			if err := d.Validate(h.DriverOptions()); err != nil {
+				return fmt.Errorf("%s: %w", n, err)
+			}
+			continue
+		}
+		if h.Plugin != "" || h.ReasoningEffort != "" {
+			return fmt.Errorf("%s: plugin and reasoning_effort require a driver", n)
 		}
 		// Usage is behavioral: a command must react to the prompt or the prompt
 		// file. This accepts any valid template expression and rejects a token
@@ -307,11 +360,6 @@ func (c Config) Validate() error {
 		}
 		if slices.Equal(expanded, promptVariant) && slices.Equal(expanded, fileVariant) {
 			return fmt.Errorf("%s: command needs {{.Prompt}} or {{.PromptFile}}", n)
-		}
-		for _, env := range h.Env {
-			if !AllowedEnv(env, c.WebhookSecretEnv) || exports[env] {
-				return fmt.Errorf("%s: forbidden environment name %q", n, env)
-			}
 		}
 	}
 	return nil

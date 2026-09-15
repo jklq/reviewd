@@ -20,8 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 const maxBytes = 1 << 20

@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+FROM node:22-bookworm-slim AS base
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git ripgrep && rm -rf /var/lib/apt/lists/*
+ENV HOME=/home/reviewd
+WORKDIR /workspace
+
+FROM base AS claudecode
+RUN npm install --prefix /opt/reviewd-sdk @anthropic-ai/claude-agent-sdk@0.3.272
+
+FROM base AS opencode
+RUN npm install -g opencode-ai@1.18.31 \
+    && npm install --prefix /opt/reviewd-sdk @opencode-ai/sdk@1.18.31
+
+# Supply the installed, versioned Muse executable (not its auto-update launcher).
+# No login state or credentials are needed by, or copied into, the image.
+FROM base AS muse
+COPY bin/muse /usr/local/bin/muse
+RUN chmod 0755 /usr/local/bin/muse \
+    && npm install --prefix /opt/reviewd-sdk @muse-code/sdk@0.1.1

@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/report"
 )
 
 type App struct {

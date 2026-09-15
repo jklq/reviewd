@@ -19,14 +19,15 @@ import (
 	"syscall"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/credential"
-	"reviewd/internal/github"
-	"reviewd/internal/report"
-	"reviewd/internal/review"
-	"reviewd/internal/sandbox"
-	"reviewd/internal/server"
-	"reviewd/internal/store"
+	harnessplugin "github.com/jklq/reviewd/harness/plugin"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/credential"
+	"github.com/jklq/reviewd/internal/github"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/review"
+	"github.com/jklq/reviewd/internal/sandbox"
+	"github.com/jklq/reviewd/internal/server"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 const help = `reviewd — self-hosted code review with bring-your-own harnesses
@@ -49,7 +50,9 @@ The agent CLI runs inside review containers and never contacts GitHub.
 `
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	err := run(os.Args[1:])
+	harnessplugin.Close()
+	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
@@ -155,6 +158,9 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 		// A custom command owns its model selection; do not attribute the
 		// default Codex model to it.
 		h.Model = ""
+		h.Driver = ""
+		h.Plugin = ""
+		h.ReasoningEffort = ""
 	}
 	h.Env = nil
 	if env != "" {
@@ -162,6 +168,14 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 		h.Credentials = nil
 	}
 	c.Harnesses[name] = h
+	// Shipped refresh helpers are built beside reviewd; prefer their absolute
+	// path so the generated credentials do not depend on the service PATH.
+	if executable, err := os.Executable(); err == nil {
+		for key, credential := range c.Credentials {
+			credential.Command = resolveHelper(filepath.Dir(executable), credential.Command)
+			c.Credentials[key] = credential
+		}
+	}
 	if err := c.Validate(); err != nil {
 		return err
 	}
@@ -183,6 +197,22 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 	}
 	fmt.Printf("Wrote %s. Configure your GitHub App key, webhook secret and harness credentials; see README.md.\n", path)
 	return nil
+}
+
+// resolveHelper expands a bare command name to a helper executable built beside
+// reviewd, when one exists, and leaves PATH lookups and explicit paths alone.
+func resolveHelper(dir string, command []string) []string {
+	if len(command) == 0 || strings.ContainsRune(command[0], filepath.Separator) {
+		return command
+	}
+	helper := filepath.Join(dir, command[0])
+	if info, err := os.Stat(helper); err != nil || info.IsDir() {
+		return command
+	}
+	resolved := make([]string, len(command))
+	copy(resolved, command)
+	resolved[0] = helper
+	return resolved
 }
 
 func configCheck(sub string) error {
@@ -217,8 +247,24 @@ func doctor(c config.Config) error {
 				return fmt.Errorf("missing %s for harness %s", key, name)
 			}
 		}
-		if _, err := credentials.Environment(ctx, h.Credentials); err != nil {
+		values, err := credentials.Environment(ctx, h.Credentials)
+		if err != nil {
 			return err
+		}
+		if h.Driver != "" {
+			if values == nil {
+				values = map[string]string{}
+			}
+			for _, key := range h.Env {
+				values[key] = os.Getenv(key)
+			}
+			driver, err := h.LookupDriver()
+			if err != nil {
+				return err
+			}
+			if _, err := driver.Prepare(h.DriverOptions(), values); err != nil {
+				return fmt.Errorf("harness %s: %w", name, err)
+			}
 		}
 	}
 	if len(os.Getenv(c.WebhookSecretEnv)) < 16 {

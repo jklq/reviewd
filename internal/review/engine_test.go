@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/report"
-	"reviewd/internal/sandbox"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/sandbox"
 )
 
 type fakeRunner struct {

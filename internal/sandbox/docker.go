@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/credential"
-	"reviewd/internal/report"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/credential"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 type Request struct {
@@ -67,6 +67,12 @@ func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	if err := os.WriteFile(filepath.Join(r.Input, "prompt.md"), []byte(r.Prompt), 0600); err != nil {
 		return result, err
 	}
+	prepared, closeProvider, err := d.prepareProvider(ctx, r)
+	if err != nil {
+		return result, err
+	}
+	defer closeProvider()
+	r.Harness = prepared.harness
 	args, err := config.Expand(r.Harness.Command, config.Variables{Prompt: r.Prompt, PromptFile: "/review/prompt.md", Workspace: "/workspace", Role: r.Role, Index: r.Index})
 	if err != nil {
 		return result, err
@@ -82,6 +88,7 @@ func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	if d.Owner != "" {
 		argv = append(argv, "--label", "reviewd.owner="+d.Owner)
 	}
+	argv = append(argv, prepared.dockerArgs...)
 	values, err := d.Credentials.Environment(ctx, r.Harness.Credentials)
 	if err != nil {
 		return result, err
@@ -102,7 +109,10 @@ func (d Docker) Run(ctx context.Context, r Request) (report.Report, error) {
 	// This shell program is fixed. All operator arguments and prompt text pass as
 	// positional arguments, never interpolated as shell source. Harness output goes
 	// to stderr; only the reporting CLI exports JSON on stdout.
-	setup := `mkdir -p /home/reviewd && cp -a /source/. /workspace/ && rm -f /workspace/AGENTS.md /workspace/agents.md && cp /review/AGENTS.md /workspace/AGENTS.md && cp /review/AGENTS.md /workspace/agents.md && "$@" >&2 && /usr/local/bin/reviewd agent export`
+	setup := `mkdir -p /home/reviewd && cp -a /source/. /workspace/ && rm -rf /workspace/AGENTS.md /workspace/agents.md && cp /review/AGENTS.md /workspace/AGENTS.md && cp /review/AGENTS.md /workspace/agents.md && "$@" >&2 && /usr/local/bin/reviewd agent export`
+	if prepared.socketDir != "" {
+		setup = `/usr/local/bin/reviewd agent model-relay >&2 & ` + setup
+	}
 	argv = append(argv, "--entrypoint", "/bin/sh", r.Harness.Image, "-c", setup, "reviewd-harness")
 	argv = append(argv, args...)
 	log, err := os.OpenFile(filepath.Join(r.Output, "harness.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)

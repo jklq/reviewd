@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 func definition(t *testing.T, state string) config.Credential {

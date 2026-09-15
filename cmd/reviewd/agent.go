@@ -8,9 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"reviewd/internal/config"
-	"reviewd/internal/report"
-	"reviewd/internal/store"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/gateway"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/store"
 )
 
 func readJSON(path string, v any) error { return readJSONLimit(path, v, 1<<20) }
@@ -30,6 +31,9 @@ func readJSONLimit(path string, v any, limit int64) error {
 	return config.Decode(b, v)
 }
 func agent(args []string) error {
+	if len(args) == 1 && args[0] == "model-relay" {
+		return gateway.Relay()
+	}
 	if len(args) == 0 || args[0] == "help" {
 		fmt.Print(report.Instructions)
 		return nil

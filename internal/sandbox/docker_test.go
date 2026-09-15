@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"reviewd/internal/config"
-	"reviewd/internal/credential"
-	"reviewd/internal/report"
-	"reviewd/internal/review"
-	"reviewd/internal/sandbox"
+	"github.com/jklq/reviewd/internal/config"
+	"github.com/jklq/reviewd/internal/credential"
+	"github.com/jklq/reviewd/internal/report"
+	"github.com/jklq/reviewd/internal/review"
+	"github.com/jklq/reviewd/internal/sandbox"
 )
 
 // Runs real containers and the actual agent CLI, with a deterministic harness.
@@ -51,6 +51,12 @@ func TestDockerPipeline(t *testing.T) {
 	}
 	if err = os.WriteFile(filepath.Join(head, "store.go"), []byte("package store\nfunc save() {}\n"), 0600); err != nil {
 		t.Fatal(err)
+	}
+	// Repository content must not be able to shadow the trusted agent instructions.
+	for _, name := range []string{"AGENTS.md", "agents.md"} {
+		if err = os.MkdirAll(filepath.Join(head, name), 0700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	script := `set -eu
  test -s /workspace/AGENTS.md

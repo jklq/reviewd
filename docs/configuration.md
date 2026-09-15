@@ -1,6 +1,6 @@
 # Configuration reference
 
-Run `reviewd init` for a template, then verify with `reviewd config check` (static) and `reviewd doctor` (runtime). Unknown fields are errors. Omitted top-level fields use defaults. Harness and credential maps replace the default sets. A command must consume `{{.Prompt}}` or `{{.PromptFile}}`. Configuration is loaded at startup, so restart after changes.
+Run `reviewd init` for a template, then verify with `reviewd config check` (static) and `reviewd doctor` (runtime). Unknown fields are errors. Omitted top-level fields use defaults. Harness and credential maps replace the default sets. A custom harness command must consume `{{.Prompt}}` or `{{.PromptFile}}`. Configuration is loaded at startup, so restart after changes.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -10,7 +10,7 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 | `private_key_file` | `./github-app.pem` | PKCS#1 or PKCS#8 RSA key |
 | `webhook_secret_env` | `REVIEWD_WEBHOOK_SECRET` | Env var holding webhook secret |
 | `agent_binary` | running binary | Optional static Linux binary at identical host/container path |
-| `harnesses` | Codex | Named image/command/env/network/credential entries |
+| `harnesses` | Codex | Named driver or custom command entries; see [harnesses](harnesses.md) |
 | `credentials` | Codex | Shared refresh definitions |
 | `reviewers` | `["codex"]` | Round-robin harness selection |
 | `parallelism` | `1` | 1–16 concurrent reviewers per PR |
@@ -27,9 +27,9 @@ Run `reviewd init` for a template, then verify with `reviewd config check` (stat
 
 Maximum **concurrent** reviewer containers = `workers × parallelism`. Validation uses one container per job, except parallelism 1 runs its single reviewer as the final pass with no separate validator. Defaults run two PR jobs at a time, each a single reviewer pass. Independent reviews of the same PR are serialized. Each attempt can invoke `parallelism + 1` harnesses (one total when `parallelism` is 1). Retries multiply model usage.
 
-Harness `env` lists variable **names**, not values. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
+Harness `env` lists variable **names**, not values. For a provider driver these values stay on the server; for custom command harnesses they are forwarded to the container. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
 
-Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex harness pins `gpt-5.6-luna` and `model_reasoning_effort="max"` in its command so reviews are reproducible rather than following ambient defaults.
+Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex provider pins `gpt-5.6-luna` and `reasoning_effort: "max"` through its SDK so reviews are reproducible rather than following ambient defaults.
 
 ## PR-size harness tiers
 
@@ -99,7 +99,7 @@ The state file must exist and be service-writable. The command renews when neces
 }
 ```
 
-Return actual expiry, not the example. Export exactly the configured names with enough remaining validity. Keep refresh tokens in the state file and export only access credentials. A command may project still-valid credentials without a network request. Provider-specific logic belongs in the command, not in reviewd.
+Return actual expiry, not the example. Export exactly the configured names with enough remaining validity. Keep refresh tokens in the state file and export only access credentials. A command may project still-valid credentials without a network request; the shipped `reviewd-credential-project NAME` helper does this for provider CLI login files that do not rotate, exporting the JSON state as `NAME`. Login refresh logic belongs in the command. Provider drivers consume the exported access credentials on the server.
 
 reviewd locks the canonical state path across workers, checks cache after acquiring the lock, and atomically caches successful exports. Only refresh is serialized. Cache files and locks sit beside the state file. Replacing the login invalidates cache automatically.
 
@@ -109,7 +109,7 @@ Commands have a 1-minute timeout and 1 MiB output limit. Failed refreshes stop t
 
 `reviewd doctor` resolves credentials and checks freshness without a review, using the service's identity, PATH and environment.
 
-The shipped Codex refresh returns `CODEX_AUTH_JSON` with the refresh token removed and forwards `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CODEX_CA_CERTIFICATE`, `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` when present. The harness writes the access-only login into a temporary home. The server image includes Python 3 and Codex CLI.
+The shipped `reviewd-credential-codex` helper, built beside reviewd by `make build`, returns `CODEX_AUTH_JSON` with the refresh token removed and forwards `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CODEX_CA_CERTIFICATE`, `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` when present. It checks the access token's expiry and rotates the login through the installed Codex CLI's app server when needed, persisting the rotated refresh token in the state file. The Codex provider reads the exported value on the server and uses only its access token and account ID in the model gateway, and never writes a login into the container; a custom command may still write its export into its temporary home. Keep Codex CLI on the service `PATH`.
 
 ## Review policy
 

@@ -10,7 +10,7 @@ make codex-image
 ```
 
 Create an unprivileged service user with Docker socket access, which is privileged host access. Paths:
-- Binary: `/opt/reviewd/bin/reviewd`
+- Binaries: `/opt/reviewd/bin/reviewd` plus the credential helpers `reviewd-credential-codex` and `reviewd-credential-project`, built beside it
 - Config: `/etc/reviewd/reviewd.json`
 - App key: `/etc/reviewd/github-app.pem`
 - Data: `/var/lib/reviewd` (owned by service user, mode 0700)
@@ -28,7 +28,7 @@ Store webhook secret in `/etc/reviewd/environment` (0600):
 REVIEWD_WEBHOOK_SECRET=<random>
 ```
 
-For Codex: install Python 3 and CLI on service PATH. Add to config:
+For Codex: install the Codex CLI on the service PATH; the shipped `reviewd-credential-codex` helper rotates the login through it. Add to config:
 ```json
 "credentials": {
   "codex_account": {
@@ -66,7 +66,7 @@ Build:
 make build && make image && make codex-image
 ```
 
-Choose a host directory for config, keys, binary and data (e.g., `/opt/reviewd`). Copy binary and config there. In config set:
+Choose a host directory for config, keys, binaries and data (e.g., `/opt/reviewd`). Copy the built binaries and the config there. In config set:
 ```json
 {
   "listen": "0.0.0.0:8080",
@@ -87,7 +87,7 @@ DOCKER_GID=999
 REVIEWD_WEBHOOK_SECRET=<random>
 ```
 
-For Codex, keep the login at `/opt/reviewd/credentials/codex/auth.json` and point `state_file` there. It is covered by the deployment-directory mount. The server image contains Python and Codex, so ensure the service UID can write the login directory and adjacent cache. Only the server accesses this directory, not sibling review containers.
+For Codex, keep the login at `/opt/reviewd/credentials/codex/auth.json` and point `state_file` there. It is covered by the deployment-directory mount. The server image contains the Codex CLI and the refresh helper, so ensure the service UID can write the login directory and adjacent cache. Only the server accesses this directory, not sibling review containers.
 
 Use numeric UID/GID that owns the deployment directory and socket's GID (`stat -c %g /var/run/docker.sock`). Run `docker compose up -d`. Keep the bind-published listener on loopback and use the same TLS proxy setup as native deployment.
 
@@ -117,10 +117,10 @@ No automatic retention. Reclaim disk by removing `runs/JOB_ID` for terminal jobs
 
 ## Security boundaries
 
-Shared credentials are refreshed by trusted commands on the server. Containers receive only exported access credentials. Login state, refresh tokens, locks and caches stay outside review workspaces. Static `env` credentials remain supported.
+Shared credentials are refreshed by trusted commands on the server. Official providers retain exported access credentials on the server; custom command harnesses receive them in their containers. Login state, refresh tokens, locks and caches stay outside review workspaces. Static `env` credentials remain supported.
 
-Each harness has: read-only image, no Linux capabilities, no privilege escalation, fixed PID/CPU/memory limits, bounded writable workspace and `/tmp`, read-only snapshots/context, and 8 MiB tmpfs output. No writable host paths exposed. After the harness exits, the reporting CLI exports its submitted JSON over stdout and the server validates and persists it. The model-provider credential is available to that harness by design.
+Each harness has: read-only image, no Linux capabilities, no privilege escalation, fixed PID/CPU/memory limits, bounded writable workspace and `/tmp`, read-only snapshots/context, and 8 MiB tmpfs output. No writable host paths exposed. After the harness exits, the reporting CLI exports its submitted JSON over stdout and the server validates and persists it. Only custom command harnesses receive their model-provider credentials. Official SDK providers connect to a per-run Unix socket; the server gateway adds credentials to allowlisted model requests. See [provider boundaries](harnesses.md#credential-boundary).
 
-Processes run as the daemon's numeric UID/GID. Network `bridge` allows Internet access. Use dedicated host and restricted `reviewd-*` network where threat model requires.
+Processes run as the daemon's numeric UID/GID. Network `bridge` allows Internet access. Provider model requests also work with `network: "none"`: the Unix-socket gateway does not require container networking. Tests or dependency installation that need the Internet still require network access. Use dedicated host and restricted `reviewd-*` network where threat model requires.
 
 Docker is not a security boundary against hostile kernel exploits. Prefer isolated host/VM for public fork reviews. Default leaves fork reviews disabled and restricts manual triggers to repository collaborators. Operator CLI is trusted and controlled by OS permissions.
