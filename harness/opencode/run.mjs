@@ -1,13 +1,14 @@
 import { createOpencode } from '/opt/reviewd-sdk/node_modules/@opencode-ai/sdk/dist/index.js';
 import { readFileSync } from 'node:fs';
 const model = process.env.REVIEWD_MODEL;
+const effort = process.env.REVIEWD_REASONING_EFFORT;
 const { client, server } = await createOpencode({ config: {
   model: `reviewd/${model}`, permission: 'allow', share: 'disabled',
   enabled_providers: ['reviewd'],
   provider: { reviewd: {
     npm: '@ai-sdk/openai-compatible', name: 'reviewd',
     options: { baseURL: process.env.REVIEWD_MODEL_URL + '/v1', apiKey: 'reviewd-placeholder' },
-    models: { [model]: { name: model, tool_call: true } },
+    models: { [model]: { name: model, tool_call: true, ...(effort ? { options: { reasoningEffort: effort } } : {}) } },
   } },
 } });
 try {

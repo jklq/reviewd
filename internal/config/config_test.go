@@ -112,6 +112,37 @@ func TestConfigRejectsUnsafeSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestServiceTierConfiguration(t *testing.T) {
+	c := Default()
+	h := c.Harnesses["codex"]
+	h.ServiceTier = "fast"
+	c.Harnesses["codex"] = h
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid service tier rejected: %v", err)
+	}
+	for _, mutate := range []func(*Config){
+		func(c *Config) {
+			h := c.Harnesses["codex"]
+			h.ServiceTier = "fast"
+			h.Driver = ""
+			h.Command = []string{"agent", "{{.Prompt}}"}
+			c.Harnesses["codex"] = h
+		},
+		func(c *Config) {
+			h := c.Harnesses["codex"]
+			h.Driver = "github.com/jklq/reviewd/harness/muse"
+			h.ServiceTier = "fast"
+			c.Harnesses["codex"] = h
+		},
+	} {
+		c := Default()
+		mutate(&c)
+		if c.Validate() == nil {
+			t.Fatal("invalid service tier accepted")
+		}
+	}
+}
 func TestSizeTierSelection(t *testing.T) {
 	parallelism := 2
 	c := Default()

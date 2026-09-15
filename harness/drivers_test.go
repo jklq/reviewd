@@ -118,6 +118,37 @@ func TestMuseLoginCredential(t *testing.T) {
 	}
 }
 
+func TestProviderOptions(t *testing.T) {
+	codex, _ := harness.Lookup("github.com/jklq/reviewd/harness/codex")
+	launch, err := codex.Prepare(harness.Options{Model: "m", ServiceTier: "fast"}, map[string]string{"OPENAI_API_KEY": "key-123456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Environment["REVIEWD_SERVICE_TIER"] != "fast" {
+		t.Fatalf("service tier not forwarded: %v", launch.Environment)
+	}
+	if err = codex.Validate(harness.Options{Model: "m", ServiceTier: "bad\ttier"}); err == nil {
+		t.Fatal("control characters accepted in service tier")
+	}
+	opencode, _ := harness.Lookup("github.com/jklq/reviewd/harness/opencode")
+	launch, err = opencode.Prepare(harness.Options{Model: "opencode-go/deepseek-v4.1-flash", ReasoningEffort: "max"}, map[string]string{"OPENCODE_API_KEY": "key-123456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Environment["REVIEWD_REASONING_EFFORT"] != "max" {
+		t.Fatalf("reasoning effort not forwarded: %v", launch.Environment)
+	}
+	for name := range map[string]bool{"muse": true, "claudecode": true, "opencode": true} {
+		d, err := harness.Lookup("github.com/jklq/reviewd/harness/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = d.Validate(harness.Options{Model: "m", ServiceTier: "fast"}); err == nil {
+			t.Fatalf("%s accepted a service tier", name)
+		}
+	}
+}
+
 func TestCodexAccount(t *testing.T) {
 	d, _ := harness.Lookup("github.com/jklq/reviewd/harness/codex")
 	launch, err := d.Prepare(harness.Options{Model: "test"}, map[string]string{"CODEX_AUTH_JSON": `{"tokens":{"access_token":"access-secret","account_id":"account","refresh_token":"never-export"}}`})

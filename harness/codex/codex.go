@@ -16,7 +16,10 @@ type Driver struct{}
 
 func init() { harness.Register("github.com/jklq/reviewd/harness/codex", Driver{}) }
 func (Driver) Validate(o harness.Options) error {
-	return harness.ValidateOptions(o, "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent")
+	if err := harness.ValidateOptions(o, "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"); err != nil {
+		return err
+	}
+	return harness.ValidateOption("service_tier", o.ServiceTier)
 }
 func (d Driver) Prepare(o harness.Options, values map[string]string) (harness.Launch, error) {
 	if err := d.Validate(o); err != nil {

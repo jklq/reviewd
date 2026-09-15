@@ -3,8 +3,10 @@ package claudecode
 
 import (
 	_ "embed"
-	"github.com/jklq/reviewd/harness"
+	"fmt"
 	"net/http"
+
+	"github.com/jklq/reviewd/harness"
 )
 
 //go:embed run.mjs
@@ -14,6 +16,9 @@ type Driver struct{}
 
 func init() { harness.Register("github.com/jklq/reviewd/harness/claudecode", Driver{}) }
 func (Driver) Validate(o harness.Options) error {
+	if o.ServiceTier != "" {
+		return fmt.Errorf("unsupported service_tier %q", o.ServiceTier)
+	}
 	return harness.ValidateOptions(o, "low", "medium", "high", "max")
 }
 func (d Driver) Prepare(o harness.Options, values map[string]string) (harness.Launch, error) {

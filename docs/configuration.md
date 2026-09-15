@@ -30,7 +30,7 @@ Maximum **concurrent** reviewer containers = `workers × parallelism`. Validatio
 
 Harness `env` lists variable **names**, not values. For a provider driver these values stay on the server; for custom command harnesses they are forwarded to the container. Missing values fail execution, and no other process env vars are forwarded to the container. Credential `env` forwards only allowed service env vars to the refresh command. The webhook secret name, `GITHUB_*` and `REVIEWD_*` are rejected. Put provider credentials in the service environment, never GitHub or unrelated secrets.
 
-Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex provider pins `gpt-5.6-luna` and `reasoning_effort: "max"` through its SDK so reviews are reproducible rather than following ambient defaults.
+Harness `model` optionally declares the model its command selects. The published review names the harness and model that produced it. An agent may report the model it is actually running through the overview, otherwise the declared value is used. The shipped Codex provider pins `gpt-5.6-luna` and `reasoning_effort: "max"` through its SDK so reviews are reproducible rather than following ambient defaults. A Codex `service_tier` optionally requests a catalog tier such as `fast`; the driver rejects it elsewhere.
 
 ## Harness fallbacks
 
