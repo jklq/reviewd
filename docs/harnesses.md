@@ -239,6 +239,9 @@ credentials and can access the host as the service user. Inspect third-party
 implementations before installing them; the official-provider guarantee does not
 certify arbitrary plugins merely because they implement the interface. Keep plugin
 executables and their directories outside repositories and review workspaces.
+A plugin built against an older harness package decodes plugin requests without
+newer option fields and silently loses them, so `service_tier` is rejected for
+plugin entries; use a built-in driver for it.
 
 `make drivers` builds standalone executables for all four official packages;
 each provider owns its executables under `harness/PROVIDER/cmd/`.

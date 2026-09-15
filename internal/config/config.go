@@ -356,6 +356,11 @@ func (c Config) Validate() error {
 			if len(h.Command) != 0 {
 				return fmt.Errorf("%s: driver and command are mutually exclusive", n)
 			}
+			// A plugin built against an older harness package would decode the
+			// request without the new field and silently run without it.
+			if h.Plugin != "" && h.ServiceTier != "" {
+				return fmt.Errorf("%s: service_tier requires a built-in driver", n)
+			}
 			d, err := h.LookupDriver()
 			if err != nil {
 				return err

@@ -135,6 +135,12 @@ func TestServiceTierConfiguration(t *testing.T) {
 			h.ServiceTier = "fast"
 			c.Harnesses["codex"] = h
 		},
+		func(c *Config) {
+			h := c.Harnesses["codex"]
+			h.Plugin = "/nonexistent/reviewd-driver"
+			h.ServiceTier = "fast"
+			c.Harnesses["codex"] = h
+		},
 	} {
 		c := Default()
 		mutate(&c)
