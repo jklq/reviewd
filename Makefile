@@ -2,7 +2,7 @@
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build -trimpath -o bin/reviewd ./cmd/reviewd
-	CGO_ENABLED=0 go build -trimpath -o bin/reviewd-credential-codex ./cmd/reviewd-credential-codex
+	CGO_ENABLED=0 go build -trimpath -o bin/reviewd-credential-codex ./harness/codex/cmd/reviewd-credential-codex
 	CGO_ENABLED=0 go build -trimpath -o bin/reviewd-credential-project ./cmd/reviewd-credential-project
 test:
 	go test -race ./...
@@ -31,7 +31,7 @@ muse-image:
 .PHONY: drivers
 drivers:
 	mkdir -p bin
-	CGO_ENABLED=0 go build -trimpath -o bin/ ./cmd/reviewd-driver-codex ./cmd/reviewd-driver-claudecode ./cmd/reviewd-driver-muse ./cmd/reviewd-driver-opencode
+	CGO_ENABLED=0 go build -trimpath -o bin/ ./harness/codex/cmd/reviewd-driver-codex ./harness/claudecode/cmd/reviewd-driver-claudecode ./harness/muse/cmd/reviewd-driver-muse ./harness/opencode/cmd/reviewd-driver-opencode
 
 .PHONY: sdk-integration
 sdk-integration:

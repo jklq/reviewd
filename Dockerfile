@@ -6,7 +6,7 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY harness ./harness
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/ ./cmd/reviewd ./cmd/reviewd-credential-codex ./cmd/reviewd-credential-project
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/ ./cmd/reviewd ./harness/codex/cmd/reviewd-credential-codex ./cmd/reviewd-credential-project
 
 # Base for operator-provided harnesses. /bin/sh and cp are required.
 FROM debian:bookworm-slim AS harness

@@ -13,7 +13,7 @@ import (
 
 func TestExecutableDriver(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "driver")
-	build := exec.Command("go", "build", "-o", binary, "./cmd/reviewd-driver-codex")
+	build := exec.Command("go", "build", "-o", binary, "./harness/codex/cmd/reviewd-driver-codex")
 	build.Dir = "../.."
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if output, err := build.CombinedOutput(); err != nil {

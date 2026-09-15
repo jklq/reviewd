@@ -235,7 +235,8 @@ implementations before installing them; the official-provider guarantee does not
 certify arbitrary plugins merely because they implement the interface. Keep plugin
 executables and their directories outside repositories and review workspaces.
 
-`make drivers` builds standalone executables for all four official packages.
+`make drivers` builds standalone executables for all four official packages;
+each provider owns its executables under `harness/PROVIDER/cmd/`.
 For example, add `plugin: "/opt/reviewd/drivers/reviewd-driver-codex"` to a Codex
 provider entry to use its executable instead of the linked implementation.
 
