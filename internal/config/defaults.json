@@ -48,8 +48,7 @@
       "reviewers": [
         "codex"
       ],
-      "validator": "codex",
-      "parallelism": 1
+      "validator": "codex"
     },
     {
       "name": "medium",
@@ -57,16 +56,14 @@
       "reviewers": [
         "codex_xhigh"
       ],
-      "validator": "codex_xhigh",
-      "parallelism": 1
+      "validator": "codex_xhigh"
     },
     {
       "name": "large",
       "reviewers": [
         "codex_max"
       ],
-      "validator": "codex_max",
-      "parallelism": 1
+      "validator": "codex_max"
     }
   ],
   "workers": 2,

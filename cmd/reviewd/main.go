@@ -150,17 +150,33 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 	c.AppID = appID
 	name := c.Reviewers[0]
 	h := c.Harnesses[name]
+	driver := h.Driver
 	h.Image = image
 	if command != "" {
 		if err := json.Unmarshal([]byte(command), &h.Command); err != nil {
 			return err
 		}
-		// A custom command owns its model selection.
+		// A custom command owns its model selection and replaces the provider,
+		// so the default provider size tiers and variants no longer apply.
 		h.Model = ""
 		h.Driver = ""
 		h.Plugin = ""
 		h.ReasoningEffort = ""
 		h.ServiceTier = ""
+		c.SizeTiers = nil
+		for variant := range c.Harnesses {
+			if variant != name {
+				delete(c.Harnesses, variant)
+			}
+		}
+	} else {
+		// Keep the generated provider variants on the selected image.
+		for variant, harness := range c.Harnesses {
+			if harness.Driver == driver {
+				harness.Image = image
+				c.Harnesses[variant] = harness
+			}
+		}
 	}
 	h.Env = nil
 	if env != "" {
