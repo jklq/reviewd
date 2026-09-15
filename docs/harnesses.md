@@ -48,7 +48,11 @@ rotation logic out of the reviewd binary.
 
 Each provider requires `driver`, `image`, `model`, and `network`. `command` is
 mutually exclusive with `driver`. Optional `reasoning_effort` is validated by the
-driver; OpenCode currently does not expose this option.
+driver: Codex and Muse accept their effort names, Claude Code takes its effort
+levels, and OpenCode sends the value as the model's provider reasoning effort.
+Optional `service_tier` is accepted by the Codex driver only and selects a tier
+such as `fast` (sent as `priority` at request time) or another tier ID from the
+model catalog.
 
 For example, replace the `harnesses` map and reviewer/validator selection with:
 
@@ -129,7 +133,8 @@ The generated default uses the Codex provider and the existing `codex_account`
 refresh definition, whose command is the shipped `reviewd-credential-codex`
 helper built beside reviewd by `make build`. Existing configurations are not rewritten. To migrate an
 existing Codex custom harness, rebuild its image, remove `command`, add
-`driver: "github.com/jklq/reviewd/harness/codex"` and optionally `reasoning_effort`, and keep its
+`driver: "github.com/jklq/reviewd/harness/codex"` and optionally `reasoning_effort`
+and `service_tier`, and keep its
 model and shared credential reference. Run `config check`, then `doctor` under
 the service environment, and restart after installing the tested binary.
 
@@ -234,6 +239,9 @@ credentials and can access the host as the service user. Inspect third-party
 implementations before installing them; the official-provider guarantee does not
 certify arbitrary plugins merely because they implement the interface. Keep plugin
 executables and their directories outside repositories and review workspaces.
+A plugin built against an older harness package decodes plugin requests without
+newer option fields and silently loses them, so `service_tier` is rejected for
+plugin entries; use a built-in driver for it.
 
 `make drivers` builds standalone executables for all four official packages;
 each provider owns its executables under `harness/PROVIDER/cmd/`.

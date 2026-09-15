@@ -138,11 +138,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	contentType := response.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "text/event-stream") && !strings.HasPrefix(contentType, "application/json") {
+	// The ChatGPT Codex backend streams SSE without a Content-Type header, so an
+	// absent type is allowed; a present one must still look like model output.
+	if contentType != "" && !strings.HasPrefix(contentType, "text/event-stream") && !strings.HasPrefix(contentType, "application/json") {
 		http.Error(w, "invalid model response", 502)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
 	w.WriteHeader(response.StatusCode)
 	buffer := make([]byte, 32<<10)
 	reader := io.LimitReader(response.Body, 128<<20)

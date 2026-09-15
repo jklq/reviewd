@@ -11,6 +11,7 @@ import (
 type Options struct {
 	Model           string
 	ReasoningEffort string
+	ServiceTier     string
 }
 
 type Route struct {
@@ -100,6 +101,17 @@ func ValidateOptions(o Options, efforts ...string) error {
 	return fmt.Errorf("unsupported reasoning_effort %q", o.ReasoningEffort)
 }
 
+// ValidateOption rejects control characters in an optional operator-provided
+// value. Allowed names are model-catalog specific, so drivers cannot enumerate them.
+func ValidateOption(name, value string) error {
+	for _, c := range value {
+		if c < 32 || c == 127 {
+			return fmt.Errorf("invalid %s", name)
+		}
+	}
+	return nil
+}
+
 func SDKEnvironment(o Options) map[string]string {
-	return map[string]string{"REVIEWD_MODEL": o.Model, "REVIEWD_REASONING_EFFORT": o.ReasoningEffort, "REVIEWD_MODEL_URL": "http://127.0.0.1:39123"}
+	return map[string]string{"REVIEWD_MODEL": o.Model, "REVIEWD_REASONING_EFFORT": o.ReasoningEffort, "REVIEWD_SERVICE_TIER": o.ServiceTier, "REVIEWD_MODEL_URL": "http://127.0.0.1:39123"}
 }

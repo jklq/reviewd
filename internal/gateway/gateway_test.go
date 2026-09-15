@@ -33,6 +33,16 @@ func TestGatewayBoundary(t *testing.T) {
 			_, _ = w.Write([]byte(secret))
 			return
 		}
+		if string(body) == "untyped" {
+			w.Header()["Content-Type"] = nil
+			_, _ = io.WriteString(w, "data: untyped\n\n")
+			return
+		}
+		if string(body) == "html" {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, "<html>login</html>")
+			return
+		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("X-Secret", secret)
@@ -51,6 +61,7 @@ func TestGatewayBoundary(t *testing.T) {
 		status             int
 	}{
 		{"POST", "/responses", "ok", 200}, {"POST", "/responses", "error", 401}, {"POST", "/responses", "redirect", 502},
+		{"POST", "/responses", "untyped", 200}, {"POST", "/responses", "html", 502},
 		{"GET", "/responses", "", 403}, {"CONNECT", "//attacker.example:443", "", 403},
 		{"POST", "/responses?url=https://attacker.example", "", 403},
 		{"POST", "/%72esponses", "", 403}, {"POST", "/responses/../admin", "", 403},
@@ -66,12 +77,15 @@ func TestGatewayBoundary(t *testing.T) {
 		if w.Code != tc.status {
 			t.Errorf("%s %s: %d, want %d", tc.method, tc.path, w.Code, tc.status)
 		}
+		if tc.body == "untyped" && w.Body.String() != "data: untyped\n\n" {
+			t.Errorf("untyped response body not streamed: %q", w.Body.String())
+		}
 
 		if strings.Contains(w.Body.String(), secret) || strings.Contains(w.Header().Get("X-Secret"), secret) || w.Header().Get("Location") != "" {
 			t.Fatal("credential escaped")
 		}
 	}
-	if calls != 3 {
+	if calls != 5 {
 		t.Fatalf("denied requests contacted upstream: %d", calls)
 	}
 }

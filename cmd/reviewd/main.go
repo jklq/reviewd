@@ -160,6 +160,7 @@ func initConfig(path string, parallel int, image, command, env string, appID int
 		h.Driver = ""
 		h.Plugin = ""
 		h.ReasoningEffort = ""
+		h.ServiceTier = ""
 	}
 	h.Env = nil
 	if env != "" {

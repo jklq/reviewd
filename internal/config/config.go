@@ -27,6 +27,7 @@ type Harness struct {
 	Driver          string   `json:"driver,omitempty"`
 	Plugin          string   `json:"plugin,omitempty"`
 	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+	ServiceTier     string   `json:"service_tier,omitempty"`
 	Image           string   `json:"image"`
 	Command         []string `json:"command"`
 	Model           string   `json:"model,omitempty"` // Declared model, recorded in reviews when the agent does not report one.
@@ -36,7 +37,7 @@ type Harness struct {
 }
 
 func (h Harness) DriverOptions() harness.Options {
-	return harness.Options{Model: h.Model, ReasoningEffort: h.ReasoningEffort}
+	return harness.Options{Model: h.Model, ReasoningEffort: h.ReasoningEffort, ServiceTier: h.ServiceTier}
 }
 
 func (h Harness) LookupDriver() (harness.Driver, error) {
@@ -355,6 +356,11 @@ func (c Config) Validate() error {
 			if len(h.Command) != 0 {
 				return fmt.Errorf("%s: driver and command are mutually exclusive", n)
 			}
+			// A plugin built against an older harness package would decode the
+			// request without the new field and silently run without it.
+			if h.Plugin != "" && h.ServiceTier != "" {
+				return fmt.Errorf("%s: service_tier requires a built-in driver", n)
+			}
 			d, err := h.LookupDriver()
 			if err != nil {
 				return err
@@ -364,8 +370,8 @@ func (c Config) Validate() error {
 			}
 			continue
 		}
-		if h.Plugin != "" || h.ReasoningEffort != "" {
-			return fmt.Errorf("%s: plugin and reasoning_effort require a driver", n)
+		if h.Plugin != "" || h.ReasoningEffort != "" || h.ServiceTier != "" {
+			return fmt.Errorf("%s: plugin, reasoning_effort and service_tier require a driver", n)
 		}
 		// Usage is behavioral: a command must react to the prompt or the prompt
 		// file. This accepts any valid template expression and rejects a token

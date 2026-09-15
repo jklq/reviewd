@@ -10,6 +10,7 @@ const codex = new Codex({
       wire_api: 'responses', env_key: 'CODEX_API_KEY',
       supports_websockets: false,
     } },
+    service_tier: process.env.REVIEWD_SERVICE_TIER || undefined,
   },
 });
 const thread = codex.startThread({

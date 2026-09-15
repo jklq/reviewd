@@ -17,7 +17,15 @@ var script string
 type Driver struct{}
 
 func init()                                     { harness.Register("github.com/jklq/reviewd/harness/opencode", Driver{}) }
-func (Driver) Validate(o harness.Options) error { return harness.ValidateOptions(o) }
+func (Driver) Validate(o harness.Options) error {
+	if o.Model == "" {
+		return fmt.Errorf("driver requires model")
+	}
+	if o.ServiceTier != "" {
+		return fmt.Errorf("unsupported service_tier %q", o.ServiceTier)
+	}
+	return harness.ValidateOption("reasoning_effort", o.ReasoningEffort)
+}
 func (d Driver) Prepare(o harness.Options, values map[string]string) (harness.Launch, error) {
 	if err := d.Validate(o); err != nil {
 		return harness.Launch{}, err

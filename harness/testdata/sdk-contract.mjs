@@ -30,6 +30,15 @@ const server = http.createServer((request, response) => {
   request.on('data', chunk => { body += chunk; });
   request.on('end', () => {
     if (!body.includes('reviewd-sdk-contract')) { console.error('SDK omitted prompt'); process.exit(1); }
+    let parsed = {};
+    try { parsed = JSON.parse(body); } catch {}
+    console.log('SDK model options:', JSON.stringify({
+      model: parsed.model, service_tier: parsed.service_tier,
+      reasoning: parsed.reasoning, reasoning_effort: parsed.reasoning_effort,
+    }));
+    for (const want of (process.env.REVIEWD_TEST_EXPECT || '').split('\n').filter(Boolean)) {
+      if (!body.includes(want)) { console.error('SDK request omitted expected option', want); process.exit(1); }
+    }
     console.log('SDK model route verified:', request.method, request.url);
     // Exit before returning a model result: this verifies transport wiring only.
     process.exit(0);
