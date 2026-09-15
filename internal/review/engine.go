@@ -62,9 +62,11 @@ func (eng Engine) Run(ctx context.Context, dir string, meta Context, files []rep
 	sel := eng.Config.Select(lines, changed)
 	meta.SizeTier = sel.Tier
 	meta.Total = sel.Parallelism
-	for _, p := range diff.Incomplete {
-		meta.Coverage = append(meta.Coverage, "GitHub omitted the patch for "+p)
+	omitted, err := OmittedPatches(filepath.Join(dir, "head"), filepath.Join(dir, "base"), files, diff.Incomplete)
+	if err != nil {
+		return report.Report{}, err
 	}
+	meta.Coverage = append(meta.Coverage, omitted...)
 	candidates := make([]report.Report, sel.Parallelism)
 	errs := make([]error, sel.Parallelism)
 	var wg sync.WaitGroup
